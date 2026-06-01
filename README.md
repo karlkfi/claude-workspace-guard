@@ -109,6 +109,14 @@ Bugs, ideas, and questions go in
 For the development backlog and how to add new guarded commands, see
 [`docs/STATUS.md`](docs/STATUS.md).
 
+Run the test suite with:
+
+```
+python3 -m unittest discover tests -v
+```
+
+Tests are stdlib-only — no install step.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
