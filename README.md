@@ -17,6 +17,17 @@ silently.
 
 ![Claude Code's permission prompt when grep targets a file outside the project root](docs/img/ask-prompt.png)
 
+## Contents
+
+- [What it does](#what-it-does)
+- [Install](#install)
+- [How it works](#how-it-works)
+- [Configuration](#configuration)
+- [Limitations](#limitations)
+- [Design](#design)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## What it does
 
 The hook produces one of three outcomes:
