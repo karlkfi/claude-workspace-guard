@@ -111,9 +111,12 @@ agent. See [Configuration](#configuration).
 
 - Requires `python3` on your PATH.
 - Restart Claude Code so the hook is registered.
-- **Claude Code only (CLI + IDE extensions).** Not Claude Cowork / Claude
-  Desktop — those don't run plugin `PreToolUse` hooks yet, so the guard never
-  fires there ([anthropics/claude-code#45514](https://github.com/anthropics/claude-code/issues/45514)).
+- **Requires a surface that runs plugin `PreToolUse` hooks.** Claude Code does:
+  the CLI, the IDE extensions, and Claude Code running inside Claude Desktop
+  (install the plugin from the Customize tab — verified firing on macOS). Claude
+  Cowork and Claude Desktop's *native* assistant don't run plugin `PreToolUse`
+  hooks yet, so the guard never fires in those
+  ([anthropics/claude-code#45514](https://github.com/anthropics/claude-code/issues/45514)).
 
 To verify, ask Claude to run `grep root /etc/passwd` — you should see a
 permission prompt citing the outside-workspace path. Then ask it to `grep` a
