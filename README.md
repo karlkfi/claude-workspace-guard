@@ -88,6 +88,7 @@ and file-writing commands Claude reaches for most often; tools like `ls`,
 | `LC_ALL=C cat /etc/passwd`           | **ask**  |
 | `ln -s /etc/passwd link && cat link` | **ask**  |
 | `ln /etc/passwd link && cat link`    | **ask**  |
+| `echo secret > /tmp/out`             | defer    |
 | `ls /etc`                            | defer    |
 
 Note the `jq` row: `.a/.b` is a jq program, not a filesystem path. The hook
@@ -175,10 +176,13 @@ final output.
   will get an `ask` prompt rather than slip through.
 - `realpath` only follows symlinks for files that already exist; nonexistent
   paths are normalized lexically (fine for read-style commands).
-- Redirect targets (`> file`) are always resolved against the original cwd,
-  not any `cd`-shifted cwd. A relative redirect after a `cd /etc` would still
-  be checked against the original workspace cwd. Absolute redirect targets
-  still get caught.
+- Redirect targets (`> file`) are only inspected when the command chain also
+  contains a guarded command — the hook keys off guarded commands, so a bare
+  redirect from an unguarded command (`echo secret > /tmp/out`) is not checked
+  and defers to normal permissions. When a guarded command *is* present, the
+  redirect target is resolved against the original cwd, not any `cd`-shifted
+  cwd: a relative redirect after `cd /etc` is still checked against the
+  original workspace cwd, and absolute redirect targets are caught.
 - Multi-source `ln a b destdir/` (3+ positionals, symbolic or hard) is not
   staged. The hook recognises the one- and two-positional forms only.
 - In non-interactive / headless runs there is no one to answer an `ask` prompt,
