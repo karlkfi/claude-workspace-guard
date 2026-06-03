@@ -104,18 +104,32 @@ agent. See [Configuration](#configuration).
 
 ## Install
 
+Install on any Claude Code surface that runs plugin `PreToolUse` hooks — the
+CLI, the IDE extensions, or **Claude Code for Claude Desktop**. Both methods add
+the same marketplace and plugin.
+
+**Claude Code (CLI or IDE extension)** — run the slash commands:
+
 ```
 /plugin marketplace add karlkfi/claude-workspace-guard
 /plugin install workspace-guard@workspace-guard
 ```
 
+**Claude Code for Claude Desktop** — use the **Customize** tab:
+
+1. Open the **Customize** tab and go to its plugins / marketplaces section.
+2. Add `karlkfi/claude-workspace-guard` as a marketplace (the repo at
+   `https://github.com/karlkfi/claude-workspace-guard.git`).
+3. Find **workspace-guard** in that marketplace, install it, and make sure it's
+   enabled.
+
+After installing with either method:
+
 - Requires `python3` on your PATH.
 - Restart Claude Code so the hook is registered.
-- **Requires a surface that runs plugin `PreToolUse` hooks.** Claude Code does:
-  the CLI, the IDE extensions, and Claude Code running inside Claude Desktop
-  (install the plugin from the Customize tab — verified firing on macOS). Claude
-  Cowork and Claude Desktop's *native* assistant don't run plugin `PreToolUse`
-  hooks yet, so the guard never fires in those
+- **Won't fire where plugin `PreToolUse` hooks don't run.** Claude Cowork and
+  Claude Desktop's *native* assistant don't run them yet, so the guard never
+  fires in those
   ([anthropics/claude-code#45514](https://github.com/anthropics/claude-code/issues/45514)).
 
 To verify, ask Claude to run `grep root /etc/passwd` — you should see a
