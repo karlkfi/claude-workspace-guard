@@ -52,6 +52,14 @@ and file-writing commands Claude reaches for most often; tools like `ls`,
 `find`, and `xargs` aren't covered yet (see
 [`docs/STATUS.md`](docs/STATUS.md)).
 
+It also stays quiet for paths that aren't really "outside your project":
+`/dev/null` and friends, and the session's **own** background-task output under
+`/tmp/claude-<uid>/…` that the agent polls with `cat`/`tail`/`grep`. So
+sessions that spawn and manage background work aren't spammed with prompts for
+reading their own output — in real usage that one case accounted for ~37% of
+all prompts. It's scoped to the current session, so another session's scratch
+still asks.
+
 | Command                              | Decision |
 | ------------------------------------ | -------- |
 | `grep foo ./src.txt`                 | allow    |
