@@ -100,8 +100,45 @@ EXPANSION_RE = re.compile(r'\$[A-Za-z0-9_{(#?$!@*-]')
 # SPEC commands that write or mutate files. The ALLOWED_READ_PREFIXES exemption
 # (see allowed_read_prefixes()) does NOT apply to these commands, even if the
 # target path is under an allowed prefix — write access to Claude-owned dirs
-# is not exempt from the workspace check.
+# is not exempt from the workspace check. Read-classified commands can also be
+# flipped into write mode by a flag — see WRITE_MODE_FLAGS.
 WRITE_COMMANDS = frozenset({'cp', 'mv', 'tee', 'rm'})
+
+# Flags that flip an otherwise read-only SPEC command into file-writing mode
+# (Q36): sed/yq in-place editing, gawk's `-i inplace` include, sort's `-o OUT`.
+# When one is present the whole invocation is treated like a WRITE_COMMANDS
+# member — the read-prefix exemption applies to none of its files. `short`
+# letters match anywhere in a short-option cluster (`-ni`, `-i.bak`); `long`
+# options match bare or with an `=value`. Matching is deliberately loose (gawk's
+# `-i` counts even when the included library isn't `inplace`): a false positive
+# only ever downgrades a silent allow to `ask` for files under an allowed
+# prefix — never the reverse — and leaves in-workspace files untouched.
+WRITE_MODE_FLAGS = {
+    'sed':  {'short': 'i', 'long': ('--in-place',)},
+    'awk':  {'short': 'i', 'long': ('--include',)},
+    'yq':   {'short': 'i', 'long': ('--inplace',)},
+    'sort': {'short': 'o', 'long': ('--output',)},
+}
+
+
+def has_write_mode_flag(cmd_name, tokens):
+    """True when ``tokens`` (argv including the command word) carries a
+    write-mode flag for ``cmd_name`` per WRITE_MODE_FLAGS. Scanning stops at
+    the end-of-options ``--`` marker, after which everything is positional."""
+    spec = WRITE_MODE_FLAGS.get(cmd_name)
+    if not spec:
+        return False
+    for t in tokens[1:]:
+        if t == '--':
+            return False
+        if len(t) < 2 or t[0] != '-':
+            continue
+        if t.startswith('--'):
+            if t.split('=', 1)[0] in spec['long']:
+                return True
+        elif spec['short'] in t[1:]:
+            return True
+    return False
 
 # Well-known device / FD paths that are safe to read or write regardless of
 # workspace boundary. Matched against the raw token before realpath, because
@@ -2274,7 +2311,8 @@ def analyze_command(cmd, ctx, base_cwd, depth=0):
         if fs is None: continue
         guarded = True
         cmd_name = ALIASES.get(os.path.basename(g[0]), os.path.basename(g[0]))
-        is_read = cmd_name not in WRITE_COMMANDS
+        is_read = cmd_name not in WRITE_COMMANDS \
+            and not has_write_mode_flag(cmd_name, g)
         for f in fs:
             o = check_file(f, group_cwd, group_cwd_unknown, is_read=is_read)
             if o is not None:
