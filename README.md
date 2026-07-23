@@ -53,8 +53,10 @@ The hook produces one of four outcomes:
 
 Guarded commands: `grep` (and `egrep`, `fgrep`), `rg`, `sed`, `awk` (and
 `gawk`, `mawk`), `jq`, `yq`, `cat`, `head`, `tail`, `sort`, `wc`, `diff`,
-`file`, `hexdump`, plus the cat-shape readers `less`, `more`, `tac`, `rev`,
-`nl`, `uniq`, `xxd`, `od`, `strings`, `cmp`, and `zcat`/`gzcat`/`bzcat`/`xzcat`.
+`file`, `hexdump`, `uniq`, `xxd` (whose optional second positional is an
+*output* file and is treated as a write), plus the cat-shape readers `less`,
+`more`, `tac`, `rev`, `nl`, `od`, `strings`, `cmp`, and
+`zcat`/`gzcat`/`bzcat`/`xzcat`.
 On the write side: `cp`, `mv`, `tee`, `rm`, `dd`, and `mktemp` (whose default
 location is host temp — see below). These are the file-reading and file-writing
 commands Claude reaches for most often; tools like `ls`, `find`, and `xargs`
@@ -508,6 +510,8 @@ After upgrading either way:
    neither is a read command invoked with a write-mode flag (`sed -i` /
    `--in-place`, gawk `-i` / `--include`, `yq -i` / `--inplace`, `sort -o`
    / `--output`): any of these flips the whole invocation into write mode.
+   The second positional of `uniq IN OUT` / `xxd IN OUT` is an output file
+   and is checked as a write (the `IN` operand keeps the exemption).
    The exemption also does not apply to redirect targets, since the hook
    cannot verify redirect direction without running the command. Users can
    extend the list with `WORKSPACE_GUARD_READ_ALLOW_PREFIXES`; see
@@ -674,9 +678,9 @@ the gentler way to keep a human in the loop.
 A set of path prefixes are always allowed for **read-only** guarded commands
 (`cat`, `head`, `tail`, `grep`, `rg`, `sed`, `awk`, `jq`, `yq`, `diff`,
 `sort`, `wc`, `file`, `hexdump`, and their aliases). Write commands (`cp`,
-`mv`, `tee`, `rm`), redirect targets, and read commands carrying a
-write-mode flag (`sed -i`, gawk `-i inplace`, `yq -i`, `sort -o`) are never
-exempt.
+`mv`, `tee`, `rm`), redirect targets, read commands carrying a
+write-mode flag (`sed -i`, gawk `-i inplace`, `yq -i`, `sort -o`), and the
+positional output file of `uniq IN OUT` / `xxd IN OUT` are never exempt.
 
 The built-in default is `~/.claude/projects/` (Claude Code's own session and
 sub-agent data). You can extend it with additional prefixes:
@@ -826,9 +830,10 @@ final output.
   split.
 - The sibling-checkout `deny` classifies *write-context* file arguments — the
   same set the read-prefix exemption treats as writes: redirect targets, `dd`
-  operands, every operand of `cp`/`mv`/`tee`/`rm`, and every operand of a read
+  operands, every operand of `cp`/`mv`/`tee`/`rm`, every operand of a read
   command carrying a write-mode flag (`sed -i`, gawk `-i inplace`, `yq -i`,
-  `sort -o`). So a `cp` **source** or a
+  `sort -o`), and the positional output file of `uniq IN OUT` / `xxd IN OUT`.
+  So a `cp` **source** or a
   `dd if=` reading *from* a sibling checkout is denied too, not just the
   destination. That's stricter than a pure "destination only" reading, in the
   secure direction, and recoverable with `WORKSPACE_GUARD_OVERRIDE`. Pure read

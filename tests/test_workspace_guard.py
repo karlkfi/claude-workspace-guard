@@ -44,7 +44,9 @@ class SpecShapeTests(unittest.TestCase):
              # Q11 PR1: write/mutation commands (cp, mv, tee).
              "cp", "mv", "tee",
              # Q11 PR2: rm.
-             "rm"},
+             "rm",
+             # Q37: readers whose second positional is an output file.
+             "uniq", "xxd"},
         )
 
     def test_documented_aliases_present(self):
@@ -54,8 +56,10 @@ class SpecShapeTests(unittest.TestCase):
              "gawk": "awk", "mawk": "awk",
              # Q9: pure cat-shape readers aliased to `cat`.
              "less": "cat", "more": "cat",
+             # Q37: uniq/xxd left the alias list — their second positional
+             # is an output file, so they have their own SPEC rows.
              "tac": "cat", "rev": "cat", "nl": "cat",
-             "uniq": "cat", "xxd": "cat", "od": "cat",
+             "od": "cat",
              "strings": "cat", "cmp": "cat",
              "zcat": "cat", "gzcat": "cat",
              "bzcat": "cat", "xzcat": "cat"},
@@ -623,14 +627,55 @@ class FilesInCommandTests(unittest.TestCase):
 
     def test_q9_aliases_resolve_to_cat(self):
         # Each alias should parse identically to bare `cat foo.txt`.
-        for cmd in ("less", "more", "tac", "rev", "nl", "uniq",
-                    "xxd", "od", "strings", "cmp",
+        for cmd in ("less", "more", "tac", "rev", "nl",
+                    "od", "strings", "cmp",
                     "zcat", "gzcat", "bzcat", "xzcat"):
             self.assertEqual(
                 guard.files_in_command([cmd, "foo.txt"]),
                 ["foo.txt"],
                 f"alias {cmd!r} did not resolve to cat-shape",
             )
+
+    # --- Q37: uniq / xxd (own SPEC rows; second positional is an output) ----
+
+    def test_uniq_positionals(self):
+        self.assertEqual(
+            guard.files_in_command(["uniq", "in.txt", "out.txt"]),
+            ["in.txt", "out.txt"],
+        )
+
+    def test_uniq_consume_flags_do_not_shift_positionals(self):
+        # `-f 1` is a field count, not a file — with cat's spec it leaked in
+        # as a positional and shifted the output-operand index.
+        self.assertEqual(
+            guard.files_in_command(["uniq", "-f", "1", "-s", "2", "in.txt"]),
+            ["in.txt"],
+        )
+        self.assertEqual(
+            guard.files_in_command(
+                ["uniq", "--skip-fields=1", "in.txt", "out.txt"]),
+            ["in.txt", "out.txt"],
+        )
+
+    def test_xxd_consume_flags_do_not_shift_positionals(self):
+        self.assertEqual(
+            guard.files_in_command(["xxd", "-l", "16", "-c", "8", "in.bin"]),
+            ["in.bin"],
+        )
+        self.assertEqual(
+            guard.files_in_command(["xxd", "-r", "-s", "0x100", "in.hex", "out.bin"]),
+            ["in.hex", "out.bin"],
+        )
+
+    def test_output_positionals_table_rows_are_index_safe(self):
+        # The per-operand write classification indexes files_in_command()'s
+        # return by positional order — only sound while these rows have no
+        # file_flags and prog 0.
+        for cmd in guard.OUTPUT_POSITIONALS:
+            spec = guard.SPEC[cmd]
+            self.assertEqual(spec["file_flags"], {}, cmd)
+            self.assertEqual(spec["prog"], 0, cmd)
+            self.assertNotIn(cmd, guard.ALIASES, cmd)
 
     def test_alias_unknown_flag_treats_value_as_positional(self):
         # Documented false-positive: `tac -s SEP foo.txt` — cat doesn't know
@@ -2482,6 +2527,54 @@ class HookEndToEndTests(unittest.TestCase):
         # Write-mode detection only disables the exemption; in-workspace
         # files are unaffected.
         self._decision("sed -i 's/a/b/' ./notes.txt", "allow")
+
+    def test_uniq_output_claude_projects_ask(self):
+        # Q37: `uniq IN OUT` writes the second positional — write context,
+        # exemption must not apply to the output even under the read prefix.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "out.txt")
+        self._decision(f"uniq ./in.txt {target}", "ask")
+
+    def test_uniq_read_claude_projects_allow(self):
+        # Single operand is a pure read — exemption still applies.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "journal.jsonl")
+        self._decision(f"uniq {target}", "allow")
+
+    def test_uniq_exempt_input_workspace_output_allow(self):
+        # Per-operand classification: the input keeps the read exemption
+        # while the in-workspace output is fine — no prompt.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "journal.jsonl")
+        self._decision(f"uniq {target} ./deduped.txt", "allow")
+
+    def test_uniq_flag_value_not_an_output_allow(self):
+        # `-f 1` is consumed as a field count; with the old cat alias it
+        # became a positional and shifted the operand indices.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "journal.jsonl")
+        self._decision(f"uniq -f 1 {target}", "allow")
+
+    def test_xxd_output_claude_projects_ask(self):
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "dump.hex")
+        self._decision(f"xxd ./in.bin {target}", "ask")
+
+    def test_xxd_reverse_output_claude_projects_ask(self):
+        # `xxd -r IN OUT` also writes the second positional; `-s 0x10` is
+        # consumed so the operand indices stay aligned.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "rebuilt.bin")
+        self._decision(f"xxd -r -s 0x10 ./dump.hex {target}", "ask")
+
+    def test_xxd_read_claude_projects_allow(self):
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "journal.jsonl")
+        self._decision(f"xxd -l 64 {target}", "allow")
+
+    def test_uniq_output_workspace_allow(self):
+        # Both operands in-workspace: unaffected by the write classification.
+        self._decision("uniq ./in.txt ./out.txt", "allow")
 
     def test_read_allow_prefixes_env_var(self):
         # WORKSPACE_GUARD_READ_ALLOW_PREFIXES lets users add their own prefixes.

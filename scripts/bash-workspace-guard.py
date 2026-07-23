@@ -658,6 +658,25 @@ SPEC = {
     'hexdump':{'consume':{'-e':1,'-n':1,'-s':1},
                'file_flags':{'-f':(1,[0])},
                'prog':0},
+    # Q37: cat-shape readers whose SECOND positional is an OUTPUT file
+    # (`uniq IN OUT`, `xxd IN OUT`). Aliasing them to `cat` classified every
+    # operand as a read, so the read-prefix exemption silently allowed the
+    # write. Own rows so their value-taking flags don't shift positional
+    # indices; OUTPUT_POSITIONALS (below the row table) marks operand 1+ as
+    # write-context. Keep file_flags empty and prog 0 — the per-operand write
+    # classification in analyze_command assumes the returned file list is
+    # exactly the positional operands in order.
+    'uniq': {'consume':{'-f':1,'--skip-fields':1,
+                        '-s':1,'--skip-chars':1,
+                        '-w':1,'--check-chars':1},
+             'file_flags':{}, 'prog':0},
+    # xxd long options are single-dash (`-cols`, `-seek`); `-R` takes a
+    # `when` value. Attached forms (`-c16`) parse as unknown flags and fall
+    # through harmlessly.
+    'xxd':  {'consume':{'-c':1,'-cols':1,'-g':1,'-groupsize':1,
+                        '-l':1,'-len':1,'-s':1,'-seek':1,
+                        '-o':1,'-n':1,'-name':1,'-R':1},
+             'file_flags':{}, 'prog':0},
     # Q11: write/mutation commands. All positionals are file paths (sources
     # and destinations alike) — the workspace check doesn't care which is
     # which, so `prog:0` over the whole positional list is sufficient.
@@ -697,9 +716,18 @@ SPEC = {
 ALIASES = {'egrep':'grep','fgrep':'grep','gawk':'awk','mawk':'awk',
            'less':'cat','more':'cat',
            'tac':'cat','rev':'cat','nl':'cat',
-           'uniq':'cat','xxd':'cat','od':'cat',
+           'od':'cat',
            'strings':'cat','cmp':'cat',
            'zcat':'cat','gzcat':'cat','bzcat':'cat','xzcat':'cat'}
+
+# Read-classified commands whose trailing positionals are OUTPUT files (Q37):
+# value = index of the first output operand among the file positionals
+# (`uniq IN OUT` / `xxd IN OUT` write operand 1). Those operands are checked
+# as writes — no read-prefix exemption, and sibling-checkout writes deny —
+# while earlier operands stay reads. Only valid for SPEC rows with no
+# file_flags and prog 0, where files_in_command() returns exactly the
+# positional operands in order (a unit test pins this row shape).
+OUTPUT_POSITIONALS = {'uniq': 1, 'xxd': 1}
 
 
 def strip_env_prefix(tokens):
@@ -2313,8 +2341,15 @@ def analyze_command(cmd, ctx, base_cwd, depth=0):
         cmd_name = ALIASES.get(os.path.basename(g[0]), os.path.basename(g[0]))
         is_read = cmd_name not in WRITE_COMMANDS \
             and not has_write_mode_flag(cmd_name, g)
-        for f in fs:
-            o = check_file(f, group_cwd, group_cwd_unknown, is_read=is_read)
+        # Q37: for OUTPUT_POSITIONALS commands (`uniq IN OUT`, `xxd IN OUT`)
+        # the operands at index >= out_from are output files — write context.
+        # Indexing into `fs` is positional order because those SPEC rows have
+        # no file_flags and prog 0 (files_in_command appends flag-files first,
+        # which would otherwise shift indices).
+        out_from = OUTPUT_POSITIONALS.get(cmd_name)
+        for i, f in enumerate(fs):
+            f_is_read = is_read and (out_from is None or i < out_from)
+            o = check_file(f, group_cwd, group_cwd_unknown, is_read=f_is_read)
             if o is not None:
                 outside.append(o)
 
