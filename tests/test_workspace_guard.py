@@ -970,6 +970,51 @@ class SessionProjectDirTests(unittest.TestCase):
             os.path.realpath(self.proj))
 
 
+class WriteModeFlagsUnitTests(unittest.TestCase):
+    """Unit tests for has_write_mode_flag() (Q36): flags that flip a
+    read-classified command into write mode, disabling the read-prefix
+    exemption for the whole invocation."""
+
+    def test_sed_inplace_variants(self):
+        for argv in (["sed", "-i", "s/a/b/", "f"],
+                     ["sed", "-i.bak", "s/a/b/", "f"],
+                     ["sed", "-ni", "s/a/b/p", "f"],
+                     ["sed", "--in-place", "s/a/b/", "f"],
+                     ["sed", "--in-place=.bak", "s/a/b/", "f"]):
+            self.assertTrue(guard.has_write_mode_flag("sed", argv), argv)
+
+    def test_sed_read_only_forms(self):
+        for argv in (["sed", "-n", "1p", "f"],
+                     ["sed", "-e", "s/a/b/", "f"],
+                     # After end-of-options, `-i` is a filename.
+                     ["sed", "s/a/b/", "--", "-i"]):
+            self.assertFalse(guard.has_write_mode_flag("sed", argv), argv)
+
+    def test_awk_include(self):
+        self.assertTrue(guard.has_write_mode_flag(
+            "awk", ["awk", "-i", "inplace", "{print}", "f"]))
+        self.assertTrue(guard.has_write_mode_flag(
+            "awk", ["awk", "--include", "inplace", "{print}", "f"]))
+        self.assertFalse(guard.has_write_mode_flag(
+            "awk", ["awk", "{print}", "f"]))
+        self.assertFalse(guard.has_write_mode_flag(
+            "awk", ["awk", "-F:", "{print}", "f"]))
+
+    def test_yq_and_sort(self):
+        self.assertTrue(guard.has_write_mode_flag(
+            "yq", ["yq", "-i", ".a = 1", "f"]))
+        self.assertTrue(guard.has_write_mode_flag(
+            "sort", ["sort", "-o", "out", "in"]))
+        self.assertTrue(guard.has_write_mode_flag(
+            "sort", ["sort", "--output=out", "in"]))
+        self.assertFalse(guard.has_write_mode_flag(
+            "sort", ["sort", "-r", "in"]))
+
+    def test_unlisted_command_never_matches(self):
+        self.assertFalse(guard.has_write_mode_flag("cat", ["cat", "-i"]))
+        self.assertFalse(guard.has_write_mode_flag("grep", ["grep", "-i", "x", "f"]))
+
+
 class AllowedReadPrefixesUnitTests(unittest.TestCase):
     """Unit tests for claude_projects_dir() and allowed_read_prefixes()."""
 
@@ -2392,6 +2437,51 @@ class HookEndToEndTests(unittest.TestCase):
         target = self._claude_projects_path(
             "-Users-me-proj", "wf_abc123", "out.txt")
         self._decision(f"cat in.txt > {target}", "ask")
+
+    def test_sed_inplace_claude_projects_ask(self):
+        # Q36: `sed -i` mutates its file operand — write mode; the read
+        # exemption must not apply (memory files feed future sessions'
+        # context, so a silent in-place write is an injection vector).
+        target = self._claude_projects_path(
+            "-Users-me-proj", "memory", "MEMORY.md")
+        self._decision(f"sed -i 's/a/b/' {target}", "ask")
+
+    def test_sed_inplace_cluster_claude_projects_ask(self):
+        # `-ni` cluster: the `i` inside a short-option run still counts.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "memory", "MEMORY.md")
+        self._decision(f"sed -ni 's/a/b/p' {target}", "ask")
+
+    def test_sed_read_only_claude_projects_allow(self):
+        # Plain sed (no -i) stays a read — exemption applies.
+        target = self._claude_projects_path(
+            "-Users-me-proj", "memory", "MEMORY.md")
+        self._decision(f"sed -n '1,10p' {target}", "allow")
+
+    def test_awk_inplace_claude_projects_ask(self):
+        target = self._claude_projects_path(
+            "-Users-me-proj", "memory", "MEMORY.md")
+        self._decision(f"awk -i inplace '{{print}}' {target}", "ask")
+
+    def test_yq_inplace_claude_projects_ask(self):
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "data.yaml")
+        self._decision(f"yq -i '.a = 1' {target}", "ask")
+
+    def test_sort_output_claude_projects_ask(self):
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "out.txt")
+        self._decision(f"sort -o {target} ./in.txt", "ask")
+
+    def test_sort_read_claude_projects_allow(self):
+        target = self._claude_projects_path(
+            "-Users-me-proj", "wf_abc123", "journal.jsonl")
+        self._decision(f"sort {target}", "allow")
+
+    def test_sed_inplace_workspace_allow(self):
+        # Write-mode detection only disables the exemption; in-workspace
+        # files are unaffected.
+        self._decision("sed -i 's/a/b/' ./notes.txt", "allow")
 
     def test_read_allow_prefixes_env_var(self):
         # WORKSPACE_GUARD_READ_ALLOW_PREFIXES lets users add their own prefixes.

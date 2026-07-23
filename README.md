@@ -504,10 +504,13 @@ After upgrading either way:
    directory is written exclusively by the Claude Code harness (session
    metadata, sub-agent data, workflow journals) and reading it back is not
    the boundary this hook guards. Write commands (`cp`, `mv`, `tee`, `rm`)
-   are **not** exempt — they must still pass the workspace check. The
-   exemption also does not apply to redirect targets, since the hook cannot
-   verify redirect direction without running the command. Users can extend
-   the list with `WORKSPACE_GUARD_READ_ALLOW_PREFIXES`; see
+   are **not** exempt — they must still pass the workspace check — and
+   neither is a read command invoked with a write-mode flag (`sed -i` /
+   `--in-place`, gawk `-i` / `--include`, `yq -i` / `--inplace`, `sort -o`
+   / `--output`): any of these flips the whole invocation into write mode.
+   The exemption also does not apply to redirect targets, since the hook
+   cannot verify redirect direction without running the command. Users can
+   extend the list with `WORKSPACE_GUARD_READ_ALLOW_PREFIXES`; see
    [Configuration](#configuration).
 11. **Deny** host-wide temp. After the steps above, any *remaining*
    outside-workspace file argument whose resolved `realpath` is at or under a
@@ -671,7 +674,9 @@ the gentler way to keep a human in the loop.
 A set of path prefixes are always allowed for **read-only** guarded commands
 (`cat`, `head`, `tail`, `grep`, `rg`, `sed`, `awk`, `jq`, `yq`, `diff`,
 `sort`, `wc`, `file`, `hexdump`, and their aliases). Write commands (`cp`,
-`mv`, `tee`, `rm`) and redirect targets are never exempt.
+`mv`, `tee`, `rm`), redirect targets, and read commands carrying a
+write-mode flag (`sed -i`, gawk `-i inplace`, `yq -i`, `sort -o`) are never
+exempt.
 
 The built-in default is `~/.claude/projects/` (Claude Code's own session and
 sub-agent data). You can extend it with additional prefixes:
@@ -821,7 +826,9 @@ final output.
   split.
 - The sibling-checkout `deny` classifies *write-context* file arguments — the
   same set the read-prefix exemption treats as writes: redirect targets, `dd`
-  operands, and every operand of `cp`/`mv`/`tee`/`rm`. So a `cp` **source** or a
+  operands, every operand of `cp`/`mv`/`tee`/`rm`, and every operand of a read
+  command carrying a write-mode flag (`sed -i`, gawk `-i inplace`, `yq -i`,
+  `sort -o`). So a `cp` **source** or a
   `dd if=` reading *from* a sibling checkout is denied too, not just the
   destination. That's stricter than a pure "destination only" reading, in the
   secure direction, and recoverable with `WORKSPACE_GUARD_OVERRIDE`. Pure read
