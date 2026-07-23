@@ -15,7 +15,6 @@ Specific actionable items in priority order. Pick from the top; skip 🚫 items 
 
 | ID | Item | Labels | St | Sz | Notes |
 |---|---|---|---|---|---|
-| <a id="Q37"></a>Q37 | Guard positional output files of cat-aliased tools in read-exempt dirs | `security` `bug` | 🔲 | S | `uniq IN OUT` / `xxd IN OUT` write the second positional, but both alias to `cat` (read), so the `~/.claude/projects/` exemption allows the write. Give them SPEC rows or per-operand write classes. |
 
 ## Deferred
 
