@@ -69,10 +69,14 @@ jobs:
             echo "exit=$?"
           done
 
+      # C:\Windows must be OFF the path, not just the tool dirs: the Python
+      # launcher installs py.exe there, so the README's
+      # `PATH=C:\Windows\system32;C:\Windows` still resolves `py -3`.
       - name: 3. No-interpreter path
         shell: cmd
         run: |
-          set "PATH=C:\Windows\system32;C:\Windows"
+          set "PATH=C:\Windows\system32"
+          where py & where python & where python3
           echo === current, no python ===
           echo {"ping":1} | tests\windows-probe\variant-current.cmd probe.py
           echo exit=%ERRORLEVEL%
