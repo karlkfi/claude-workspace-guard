@@ -19,15 +19,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python3 -m unittest discover tests
 
-  # Advisory only: the suite still has failures on Windows because many fixtures
-  # assume POSIX path semantics (Q39). continue-on-error keeps those from failing
-  # the workflow; drop it once Q39 lands and this becomes a real gate.
+  # Gates on the delta, not the absolute: the suite does not pass on Windows yet
+  # (Q39), so an ordinary job would be red on every pull request and stop being
+  # read. The ratchet fails only when failures or errors exceed the recorded
+  # baseline, which still catches a regression while Q39 is worked.
   unittest-windows:
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python -m unittest discover tests
+      - run: python scripts/windows-ratchet.py
