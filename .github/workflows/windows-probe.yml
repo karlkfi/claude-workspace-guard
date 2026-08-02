@@ -93,3 +93,11 @@ jobs:
           python -c "import tempfile; print('gettempdir=' + tempfile.gettempdir())"
           echo TEMP=%TEMP%
           echo LOCALAPPDATA=%LOCALAPPDATA%
+          dir /b "%TEMP%" | findstr /i claude
+
+      # Whether the 8.3 short name gettempdir() can return breaks the session
+      # allow PR #103 adds. realpath resolves short names, but only for paths
+      # that exist, so both sides have to be checked against a real directory.
+      - name: 5. Short-name resolution
+        shell: cmd
+        run: python tests\windows-probe\shortname.py
