@@ -1,0 +1,91 @@
+name: windows-probe
+
+# Runs tests/windows-probe/README.md sections 0-3 on a hosted Windows runner,
+# so the cmd.exe label-seek question is settled by a reproducible job rather
+# than by asking someone to type six lines into their own cmd.exe.
+#
+# No step may abort the job: a variant that fails IS the result, and the
+# remaining variants still have to run. Hence the trailing echo in each block,
+# and `bash {0}` (which drops the default -eo pipefail) for the Git Bash step.
+
+on:
+  push:
+    branches: ["claude/windows-probe-ci"]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Line endings are the variable under test. If the checkout rewrote them,
+      # every result below is meaningless, so this runs before anything else.
+      - name: 0. Checkout state
+        shell: cmd
+        run: |
+          ver
+          git config core.autocrlf
+          git rev-parse --short HEAD
+          python tests\windows-probe\check-bytes.py
+
+      # The perturbation set is the decisive one: current/pad01/pad07/pad13 are
+      # identical logic at shifted byte offsets. All four OK means LF-only
+      # survives the shift and the hazard is not reachable here.
+      - name: 1. cmd.exe, one line per variant
+        shell: cmd
+        run: |
+          echo === current ===
+          echo {"ping":1} | tests\windows-probe\variant-current.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo === pad01 ===
+          echo {"ping":1} | tests\windows-probe\variant-pad01.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo === pad07 ===
+          echo {"ping":1} | tests\windows-probe\variant-pad07.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo === pad13 ===
+          echo {"ping":1} | tests\windows-probe\variant-pad13.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo === labelfree ===
+          echo {"ping":1} | tests\windows-probe\variant-labelfree.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo === mixed ===
+          echo {"ping":1} | tests\windows-probe\variant-mixed.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo done
+
+      # variant-mixed is the one at risk here: its heredoc delimiter carries a
+      # carriage return and the shell has to match it.
+      - name: 2. Git Bash
+        shell: bash {0}
+        run: |
+          for v in current labelfree mixed; do
+            echo "=== $v ==="
+            echo '{"ping":1}' | tests/windows-probe/variant-$v.cmd probe.py
+            echo "exit=$?"
+          done
+
+      - name: 3. No-interpreter path
+        shell: cmd
+        run: |
+          set "PATH=C:\Windows\system32;C:\Windows"
+          echo === current, no python ===
+          echo {"ping":1} | tests\windows-probe\variant-current.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo === labelfree, no python ===
+          echo {"ping":1} | tests\windows-probe\variant-labelfree.cmd probe.py
+          echo exit=%ERRORLEVEL%
+          echo done
+
+      # What the getuid fix needed a Windows box to answer. Already answered in
+      # #103 against a live Claude Code install; this is the runner's view.
+      - name: 4. Temp roots
+        shell: cmd
+        run: |
+          python -c "import tempfile; print('gettempdir=' + tempfile.gettempdir())"
+          echo TEMP=%TEMP%
+          echo LOCALAPPDATA=%LOCALAPPDATA%
