@@ -5,8 +5,10 @@ name: windows-probe
 # than by asking someone to type six lines into their own cmd.exe.
 #
 # No step may abort the job: a variant that fails IS the result, and the
-# remaining variants still have to run. Hence the trailing echo in each block,
-# and `bash {0}` (which drops the default -eo pipefail) for the Git Bash step.
+# remaining variants still have to run. That needs three separate things --
+# `if: always()` so a red step doesn't skip the rest, `ver > nul` to reset
+# ERRORLEVEL (echo does not, so a failing variant leaks its 255 to the step),
+# and `bash {0}` to drop the -eo pipefail GitHub adds to bash steps.
 
 on:
   push:
@@ -36,6 +38,7 @@ jobs:
       # identical logic at shifted byte offsets. All four OK means LF-only
       # survives the shift and the hazard is not reachable here.
       - name: 1. cmd.exe, one line per variant
+        if: always()
         shell: cmd
         run: |
           echo === current ===
@@ -57,10 +60,12 @@ jobs:
           echo {"ping":1} | tests\windows-probe\variant-mixed.cmd probe.py
           echo exit=%ERRORLEVEL%
           echo done
+          ver > nul
 
       # variant-mixed is the one at risk here: its heredoc delimiter carries a
       # carriage return and the shell has to match it.
       - name: 2. Git Bash
+        if: always()
         shell: bash {0}
         run: |
           for v in current labelfree mixed; do
@@ -73,6 +78,7 @@ jobs:
       # launcher installs py.exe there, so the README's
       # `PATH=C:\Windows\system32;C:\Windows` still resolves `py -3`.
       - name: 3. No-interpreter path
+        if: always()
         shell: cmd
         run: |
           set "PATH=C:\Windows\system32"
@@ -84,10 +90,12 @@ jobs:
           echo {"ping":1} | tests\windows-probe\variant-labelfree.cmd probe.py
           echo exit=%ERRORLEVEL%
           echo done
+          ver > nul
 
       # What the getuid fix needed a Windows box to answer. Already answered in
       # #103 against a live Claude Code install; this is the runner's view.
       - name: 4. Temp roots
+        if: always()
         shell: cmd
         run: |
           python -c "import tempfile; print('gettempdir=' + tempfile.gettempdir())"
@@ -99,5 +107,6 @@ jobs:
       # allow PR #103 adds. realpath resolves short names, but only for paths
       # that exist, so both sides have to be checked against a real directory.
       - name: 5. Short-name resolution
+        if: always()
         shell: cmd
         run: python tests\windows-probe\shortname.py
