@@ -283,7 +283,11 @@ Without this you're on the manual update path documented under
 
 After installing with either method:
 
-- Requires `python3` on your PATH.
+- Requires Python 3 on your PATH. The hook is launched through
+  `scripts/run-python-hook.cmd`, which resolves an interpreter by trying `py -3`,
+  `python`, then `python3` (on Windows) or `python3`, then `python` (elsewhere),
+  so a working Python under any of those names is enough. If none of them runs,
+  the guard reports the problem on stderr rather than failing silently.
 - Restart Claude Code so the hook is registered.
 - **Won't fire where plugin `PreToolUse` hooks don't run.** Claude Cowork and
   Claude Desktop's *native* assistant don't run them yet, so the guard never
@@ -501,6 +505,9 @@ After upgrading either way:
      slug that holds the current `session_id`, so it never depends on Claude's
      undocumented slug encoding (which differs between a worktree and the main
      checkout); if it can't be located, the read simply keeps prompting.
+
+   `/tmp/claude-<uid>` is the POSIX root; on Windows there is no per-UID suffix
+   because the temp dir is already per-user, so the root is `%LOCALAPPDATA%\Temp\claude`.
 
    Writing into another session's scratch, and any access to a *different
    project's* scratch, still prompt. Because these allows match on the resolved
@@ -816,7 +823,8 @@ final output.
   (`/tmp/claude-<uid>/<encoded-project>/`), located by scanning the temp root
   for the slug directory that holds the current `session_id` — the
   dispatcher-tails-workers pattern. The `/tmp/claude-<uid>/` prefix is an
-  undocumented Claude Code convention inferred from the UID; if Claude Code
+  undocumented Claude Code convention inferred from the UID (on Windows, from
+  the per-user temp dir instead — there is no UID); if Claude Code
   relocates the dir, these paths simply revert to `ask` (fail-safe — the allow
   never widens the boundary). A session with no `session_id` (older CLIs)
   disables both allows entirely.

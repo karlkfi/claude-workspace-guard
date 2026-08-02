@@ -38,7 +38,8 @@ Before introducing a new pattern or abstraction, check whether the existing `SPE
 
 ### Python (`scripts/bash-workspace-guard.py`)
 
-- Stdlib only — no third-party deps. The hook runs on whatever `python3` the user has on their PATH.
+- Stdlib only — no third-party deps. The hook runs on whatever Python 3 the user has on their PATH; `scripts/run-python-hook.cmd` is the polyglot launcher that resolves one (see below).
+- **Never invoke `python3` directly from `hooks.json`.** On Windows `python3` usually resolves to the Microsoft Store alias stub, which is on PATH but exits 9009 — and because Claude Code treats a failed `PreToolUse` hook as a non-blocking error, the guard would silently enforce nothing. Route hook commands through `scripts/run-python-hook.cmd`, which probes interpreters by *executing* them (presence checks are not enough: `command -v python3` finds that same stub under Git Bash).
 - The `SPEC` table is the contract. Adding a guarded command means adding a row with explicit `consume` / `file_flags` / `prog` / `prog_suppressed_by` entries — do not "infer" flag behavior at runtime.
 - On any parsing uncertainty (unbalanced quotes, unknown shell construct, empty input), the hook **defers silently** (returns nothing) so normal permissions apply. Never fail closed without an explicit reason.
 - Default decision for outside-workspace paths is `ask`, not `deny`. Hard-blocking is opt-in via a local edit, documented in `README.md`.
@@ -67,6 +68,8 @@ Tests live in `tests/test_workspace_guard.py` (stdlib `unittest`, no third-party
 ```
 python3 -m unittest discover tests
 ```
+
+CI also runs the suite on Windows, where it does not yet pass (Q39). That job gates on the delta: it fails only when failures or errors exceed `tests/windows-baseline.json`. If it goes red, you regressed Windows — don't raise the baseline to make it green without saying why.
 
 Two layers:
 - **Unit tests** import `files_in_command` from the script and exercise per-`SPEC`-row parsing, `prog_suppressed_by`, `--opt=val`, end-of-options `--`, and aliases.
