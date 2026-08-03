@@ -58,7 +58,10 @@ def resolved_from(base, *parts):
 
     A leading-slash path is drive-relative on Windows, so it only equals what
     the hook computes when resolved against the same cwd the command's own
-    arguments resolve against. Mirrors ``resolve_from`` in the script."""
+    arguments resolve against -- and since Q52, only after being read through
+    Git Bash's mount table first, which is what the shell will do with it.
+    Mirrors ``resolve_from`` in the script. A no-op on POSIX both ways."""
+    parts = [guard.msys_to_native(p) for p in parts]
     return os.path.realpath(os.path.join(base, *parts))
 
 # Filename has a dash, so import by path.
@@ -1219,7 +1222,7 @@ class MsysPathFormTests(unittest.TestCase):
     def _on_windows(self, root=FAKE_ROOT, tmp=r"C:\Users\me\AppData\Local\Temp"):
         with mock.patch.object(guard, "DRIVE_PATHS", True), \
                 mock.patch.object(guard, "msys_root", return_value=root), \
-                mock.patch.object(tempfile, "gettempdir", return_value=tmp):
+                mock.patch.object(guard, "msys_tmp", return_value=tmp):
             yield
 
     def _expect(self, cases, **kw):
@@ -1813,9 +1816,14 @@ class HookEndToEndTests(unittest.TestCase):
         self.assertNotIn("in.txt", reason)
 
     def test_classify_cd_helper_arg(self):
-        self.assertEqual(guard.classify_cd(["cd", "/etc"]), ("arg", "/etc"))
-        self.assertEqual(guard.classify_cd(["pushd", "/tmp"]), ("arg", "/tmp"))
-        self.assertEqual(guard.classify_cd(["cd", "-L", "/etc"]), ("arg", "/etc"))
+        # The target comes back read the way the shell will read it, so on
+        # Windows `/etc` is already the mount-table path (Q52); elsewhere
+        # msys_to_native is the identity and these are the literals.
+        for tokens, target in ((["cd", "/etc"], "/etc"),
+                               (["pushd", "/tmp"], "/tmp"),
+                               (["cd", "-L", "/etc"], "/etc")):
+            self.assertEqual(guard.classify_cd(tokens),
+                             ("arg", guard.msys_to_native(target)))
 
     def test_classify_cd_helper_unknown(self):
         self.assertEqual(guard.classify_cd(["cd"]), ("unknown", None))

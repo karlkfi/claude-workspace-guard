@@ -252,6 +252,18 @@ def msys_root():
     return None
 
 
+def msys_tmp():
+    """Native path of Git Bash's ``/tmp`` — the ``usertemp`` mount, ``%TMP%``.
+
+    Realpath'd, because ``%TMP%`` commonly arrives in 8.3 short form
+    (``C:\\Users\\RUNNER~1\\AppData\\Local\\Temp``) while the file argument it
+    has to compare against is realpath'd to the long form. The exact-prefix
+    allowlist branch would survive that (it realpaths too), but the glob branch
+    only normalizes — so a short name there exempted nothing at all.
+    """
+    return os.path.realpath(tempfile.gettempdir())
+
+
 def msys_to_native(raw):
     """Rewrite a leading-slash Git Bash path into the native path it names.
 
@@ -269,7 +281,7 @@ def msys_to_native(raw):
     if m:
         return m.group(1).upper() + ':/' + (m.group(2) or '')
     if raw == '/tmp' or raw.startswith('/tmp/'):
-        return tempfile.gettempdir().rstrip('/\\') + raw[len('/tmp'):]
+        return msys_tmp().rstrip('/\\') + raw[len('/tmp'):]
     root = msys_root()
     if root is None:
         return raw
