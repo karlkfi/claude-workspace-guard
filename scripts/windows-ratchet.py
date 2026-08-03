@@ -14,6 +14,13 @@ the ``os.getuid()`` AttributeError reappearing -- while Q39 is worked.
 Errors are tracked separately from failures on purpose. A failure is an
 assertion that did not hold; an error is the guard blowing up before it could
 decide, which is the shape of every Windows bug found so far.
+
+Skips carry a ceiling too. What a platform-gated test does when it stops
+running is nothing -- it leaves the failure count alone and disappears. The
+reverse hides just as well: resolving the home directory on Windows (Q40)
+activated 24 tests that had been skipping on an unset ``$HOME``, and the twelve
+that failed arrived as an unexplained spike. Gating the count makes a change in
+which tests run an event in its own right, in both directions.
 """
 import json
 import os
@@ -26,12 +33,13 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 BASELINE = REPO / "tests" / "windows-baseline.json"
 
 # unittest's trailer, e.g. "FAILED (failures=78, errors=0, skipped=67)".
-COUNT_RE = re.compile(r"\b(failures|errors)=(\d+)")
+COUNT_RE = re.compile(r"\b(failures|errors|skipped)=(\d+)")
 RAN_RE = re.compile(r"^Ran (\d+) tests? in ", re.M)
 
 
 def run_suite():
-    """Return (ran, failures, errors) from a discover run, or exit non-zero."""
+    """Return (ran, failures, errors, skipped) from a discover run, or exit
+    non-zero."""
     proc = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "tests"],
         capture_output=True, text=True, cwd=REPO)
@@ -44,35 +52,39 @@ def run_suite():
         # comparison would be comparing against nothing.
         sys.exit("windows-ratchet: suite did not run to completion")
 
-    counts = {"failures": 0, "errors": 0}
+    counts = {"failures": 0, "errors": 0, "skipped": 0}
     counts.update({k: int(v) for k, v in COUNT_RE.findall(output)})
-    return int(ran.group(1)), counts["failures"], counts["errors"]
+    return (int(ran.group(1)), counts["failures"], counts["errors"],
+            counts["skipped"])
 
 
 def main():
-    ran, failures, errors = run_suite()
+    ran, failures, errors, skipped = run_suite()
     baseline = json.loads(BASELINE.read_text())
     max_f, max_e = baseline["failures"], baseline["errors"]
+    max_s = baseline["skipped"]
 
-    print("windows-ratchet: ran=%d failures=%d errors=%d" % (ran, failures, errors))
-    print("windows-ratchet: baseline failures<=%d errors<=%d (%s)"
-          % (max_f, max_e, baseline.get("measured_on", "unknown")))
+    print("windows-ratchet: ran=%d failures=%d errors=%d skipped=%d"
+          % (ran, failures, errors, skipped))
+    print("windows-ratchet: baseline failures<=%d errors<=%d skipped<=%d (%s)"
+          % (max_f, max_e, max_s, baseline.get("measured_on", "unknown")))
 
-    if failures > max_f or errors > max_e:
+    if failures > max_f or errors > max_e or skipped > max_s:
         sys.exit("windows-ratchet: REGRESSION -- results got worse than the "
                  "baseline. Fix it, or justify the change and update %s."
                  % BASELINE.relative_to(REPO))
 
-    if failures < max_f or errors < max_e:
+    if failures < max_f or errors < max_e or skipped < max_s:
         # Passing quietly here would let the baseline drift permanently loose,
         # which is how a ratchet stops ratcheting.
         print("windows-ratchet: IMPROVED -- tighten the baseline to "
-              'failures=%d errors=%d' % (failures, errors))
+              'failures=%d errors=%d skipped=%d' % (failures, errors, skipped))
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a") as fh:
                 fh.write("Tighten `tests/windows-baseline.json` to "
-                         "`failures=%d errors=%d`.\n" % (failures, errors))
+                         "`failures=%d errors=%d skipped=%d`.\n"
+                         % (failures, errors, skipped))
 
 
 if __name__ == "__main__":
