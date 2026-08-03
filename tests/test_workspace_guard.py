@@ -3801,11 +3801,10 @@ class ReasonAdviceEndToEndTests(unittest.TestCase):
         self.assertIn("same check", r)
 
     def test_tilde_home_token_reason_uses_outside_advice(self):
-        # Q19: `~/…` now expands to $HOME, which is outside this tempdir
-        # workspace, so the offender lands in the 'outside' bucket (not
+        # Q19: `~/…` now expands to the home directory, which is outside this
+        # tempdir workspace, so the offender lands in the 'outside' bucket (not
         # 'expand') and gets the outside-path advice.
-        if not os.environ.get("HOME"):
-            self.skipTest("HOME not set")                 # Windows: see Q43
+        self.assertIsNotNone(guard.resolved_home(), "no home directory resolves")
         r = self._reason("cat ~/.ssh/id_rsa")
         self.assertIn("~/.ssh/id_rsa", r)
         self.assertIn("same check", r)
@@ -4194,9 +4193,9 @@ class SiblingCheckoutTests(unittest.TestCase):
                               capture_output=True, text=True, check=True)
 
     def setUp(self):
-        home = os.environ.get("HOME")
-        if not home or not os.path.isdir(home):
-            self.skipTest("HOME not set")
+        home = guard.resolved_home()                      # Q43: not $HOME
+        self.assertTrue(home and os.path.isdir(home),
+                        f"no home directory to build the fixture under: {home!r}")
         self._tmp = tempfile.TemporaryDirectory(dir=home)
         self.base = os.path.realpath(self._tmp.name)
         self.main = os.path.join(self.base, "main")
@@ -4553,9 +4552,8 @@ class LiteralAssignmentValueTests(unittest.TestCase):
         self.assertIsNone(guard.literal_assignment_value("/a:/b"))
 
     def test_leading_tilde_slash_expands_to_home(self):
-        home = os.environ.get("HOME")
-        if not home:
-            self.skipTest("HOME not set")
+        home = guard.resolved_home()                      # Q43: not $HOME
+        self.assertIsNotNone(home, "no home directory resolves")
         self.assertEqual(
             guard.literal_assignment_value("~/x"), os.path.join(home, "x"))
 
@@ -4759,9 +4757,8 @@ class LiteralForItemTests(unittest.TestCase):
             self.assertIsNone(guard.literal_for_item(v), v)
 
     def test_tilde_slash_expands(self):
-        home = os.environ.get("HOME")
-        if not home:
-            self.skipTest("HOME not set")
+        home = guard.resolved_home()                      # Q43: not $HOME
+        self.assertIsNotNone(home, "no home directory resolves")
         self.assertEqual(
             guard.literal_for_item("~/x"), os.path.join(home, "x"))
 
@@ -5525,9 +5522,9 @@ class NativeToolTests(unittest.TestCase):
     /tmp `deny`. No real sensitive paths are used as targets (repo rule)."""
 
     def setUp(self):
-        home = os.environ.get("HOME")
-        if not home or not os.path.isdir(home):
-            self.skipTest("HOME not set")
+        home = guard.resolved_home()                      # Q43: not $HOME
+        self.assertTrue(home and os.path.isdir(home),
+                        f"no home directory to build the fixture under: {home!r}")
         self._tmp = tempfile.TemporaryDirectory(dir=home)
         self.base = os.path.realpath(self._tmp.name)
         self.workspace = os.path.join(self.base, "proj")
