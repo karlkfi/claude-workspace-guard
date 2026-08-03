@@ -24,6 +24,16 @@ jobs:
   # so the count is capped. Q43 made the home directory resolve without $HOME,
   # which took this from 50 to 3; the 3 left are real platform splits. Raise it
   # only with a reason.
+  #
+  # The default shell is pwsh, which is the right model for THIS job: Claude
+  # Code launches the hook through run-python-hook.cmd, so the hook process
+  # inherits a cmd.exe environment with no $HOME. The shell whose commands the
+  # hook parses is a different process -- see unittest-windows-gitbash.
+  #
+  # 3 -> 5 in Q44: MsysEnvironmentTests adds two cases that assert MSYS's
+  # variable conversion, which by construction can only run under MSYS. They
+  # run in the Git Bash job below, whose ceiling stays at 3 and is the tighter
+  # gate of the two.
   unittest-windows:
     runs-on: windows-latest
     steps:
@@ -31,100 +41,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python scripts/skip-ceiling.py --max-skips 3
+      - run: python scripts/skip-ceiling.py --max-skips 5
 
-  # TEMPORARY (Q44): ground truth from a real Git Bash, the shell Claude Code's
-  # Bash tool uses on native Windows. Never fails; it only prints. Deleted once
-  # its output is written up in docs/plan/q44-windows-validation.md.
-  windows-probe:
+  # The same suite under Git Bash, which is what Claude Code's Bash tool runs on
+  # native Windows (Q44). Not redundant with the job above: the two differ in
+  # environment, and MSYS rewrites path-shaped variables on the way into a
+  # native binary -- `HOME=/c/Users/x` and `TMP=/tmp` in the shell arrive as
+  # `C:\Users\x` and the real temp dir in Python. Every helper that reads the
+  # environment (resolved_home, claude_tmp_root, host_temp_roots) therefore has
+  # two distinct Windows environments to be correct in, and pwsh only covers one.
+  unittest-windows-gitbash:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-
-      - name: shell identity
+      - run: python scripts/skip-ceiling.py --max-skips 3
         shell: bash
-        run: |
-          set +e
-          echo "== uname =="; uname -a
-          echo "== MSYSTEM =$MSYSTEM"
-          echo "== bash    =$(type -p bash)"; bash --version | head -1
-          echo "== git bash default path exists? =="
-          ls -l "/c/Program Files/Git/bin/bash.exe"
-
-      - name: msys environment and path mapping
-        shell: bash
-        run: |
-          set +e
-          for v in HOME USERPROFILE TMPDIR TMP TEMP PWD; do
-            echo "env $v=${!v}"
-          done
-          echo "-- cygpath -w --"
-          for p in / /tmp /c/Users "$HOME" /etc /usr; do
-            echo "cygpath -w $p -> $(cygpath -w "$p" 2>&1)"
-          done
-          echo "-- pwd -W --"
-          (cd /tmp && echo "/tmp pwd -W -> $(pwd -W)")
-          (cd ~ && echo "~    pwd -W -> $(pwd -W)")
-
-      - name: what python sees when launched from git bash
-        shell: bash
-        run: |
-          set +e
-          python - <<'PY'
-          import ntpath, os, sys, tempfile
-          print("sys.platform      =", sys.platform)
-          print("os.getcwd()       =", os.getcwd())
-          for v in ("HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP", "MSYSTEM"):
-              print("environ %-12s= %r" % (v, os.environ.get(v)))
-          print("expanduser('~')   =", os.path.expanduser("~"))
-          print("gettempdir()      =", tempfile.gettempdir())
-          for p in ("/tmp", "/c/Users", "/etc/passwd", "~", "~/x"):
-              print("ntpath.realpath(%-12r) = %r" % (p, ntpath.realpath(p)))
-              print("ntpath.isabs(%-12r)    = %r" % (p, ntpath.isabs(p)))
-          PY
-
-      - name: what the guard's own helpers compute here
-        shell: bash
-        run: |
-          set +e
-          python - <<'PY'
-          from importlib import util
-          import os
-          spec = util.spec_from_file_location(
-              "g", os.path.join("scripts", "bash-workspace-guard.py"))
-          g = util.module_from_spec(spec)
-          spec.loader.exec_module(g)
-          cwd = os.getcwd()
-          print("DRIVE_PATHS      =", g.DRIVE_PATHS)
-          print("resolved_home()  =", g.resolved_home())
-          print("claude_tmp_root()=", g.claude_tmp_root())
-          print("claude_projects_dir() =", g.claude_projects_dir())
-          print("host_temp_roots(cwd)  =", g.host_temp_roots(cwd))
-          for t in ("~/x", "~", "/tmp/x", "/c/Users/runneradmin/x"):
-              print("expand_tilde(%-24r) = %r" % (t, g.expand_tilde(t)))
-          PY
-
-      - name: suite under git bash vs pwsh
-        shell: bash
-        run: |
-          set +e
-          echo "===== GIT BASH ====="
-          python -m unittest discover tests -v > gitbash.log 2>&1
-          echo "EXIT=$?"
-          tail -5 gitbash.log
-          echo "-- skipped under git bash --"
-          grep -c "skipped" gitbash.log
-          grep "skipped" gitbash.log | sort | uniq -c | sort -rn | head -40
-          echo "-- failures/errors under git bash --"
-          grep -E "^(FAIL|ERROR):" gitbash.log | head -60
-
-      - name: suite under pwsh for comparison
-        shell: pwsh
-        run: |
-          python -m unittest discover tests -v 2>&1 | Tee-Object pwsh.log | Select-Object -Last 5
-          Write-Host "-- skipped under pwsh --"
-          (Select-String -Path pwsh.log -Pattern "skipped").Count
-          exit 0
