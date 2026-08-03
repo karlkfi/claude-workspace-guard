@@ -32,3 +32,99 @@ jobs:
         with:
           python-version: "3.13"
       - run: python scripts/skip-ceiling.py --max-skips 3
+
+  # TEMPORARY (Q44): ground truth from a real Git Bash, the shell Claude Code's
+  # Bash tool uses on native Windows. Never fails; it only prints. Deleted once
+  # its output is written up in docs/plan/q44-windows-validation.md.
+  windows-probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: shell identity
+        shell: bash
+        run: |
+          set +e
+          echo "== uname =="; uname -a
+          echo "== MSYSTEM =$MSYSTEM"
+          echo "== bash    =$(type -p bash)"; bash --version | head -1
+          echo "== git bash default path exists? =="
+          ls -l "/c/Program Files/Git/bin/bash.exe"
+
+      - name: msys environment and path mapping
+        shell: bash
+        run: |
+          set +e
+          for v in HOME USERPROFILE TMPDIR TMP TEMP PWD; do
+            echo "env $v=${!v}"
+          done
+          echo "-- cygpath -w --"
+          for p in / /tmp /c/Users "$HOME" /etc /usr; do
+            echo "cygpath -w $p -> $(cygpath -w "$p" 2>&1)"
+          done
+          echo "-- pwd -W --"
+          (cd /tmp && echo "/tmp pwd -W -> $(pwd -W)")
+          (cd ~ && echo "~    pwd -W -> $(pwd -W)")
+
+      - name: what python sees when launched from git bash
+        shell: bash
+        run: |
+          set +e
+          python - <<'PY'
+          import ntpath, os, sys, tempfile
+          print("sys.platform      =", sys.platform)
+          print("os.getcwd()       =", os.getcwd())
+          for v in ("HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP", "MSYSTEM"):
+              print("environ %-12s= %r" % (v, os.environ.get(v)))
+          print("expanduser('~')   =", os.path.expanduser("~"))
+          print("gettempdir()      =", tempfile.gettempdir())
+          for p in ("/tmp", "/c/Users", "/etc/passwd", "~", "~/x"):
+              print("ntpath.realpath(%-12r) = %r" % (p, ntpath.realpath(p)))
+              print("ntpath.isabs(%-12r)    = %r" % (p, ntpath.isabs(p)))
+          PY
+
+      - name: what the guard's own helpers compute here
+        shell: bash
+        run: |
+          set +e
+          python - <<'PY'
+          from importlib import util
+          import os
+          spec = util.spec_from_file_location(
+              "g", os.path.join("scripts", "bash-workspace-guard.py"))
+          g = util.module_from_spec(spec)
+          spec.loader.exec_module(g)
+          cwd = os.getcwd()
+          print("DRIVE_PATHS      =", g.DRIVE_PATHS)
+          print("resolved_home()  =", g.resolved_home())
+          print("claude_tmp_root()=", g.claude_tmp_root())
+          print("claude_projects_dir() =", g.claude_projects_dir())
+          print("host_temp_roots(cwd)  =", g.host_temp_roots(cwd))
+          for t in ("~/x", "~", "/tmp/x", "/c/Users/runneradmin/x"):
+              print("expand_tilde(%-24r) = %r" % (t, g.expand_tilde(t)))
+          PY
+
+      - name: suite under git bash vs pwsh
+        shell: bash
+        run: |
+          set +e
+          echo "===== GIT BASH ====="
+          python -m unittest discover tests -v > gitbash.log 2>&1
+          echo "EXIT=$?"
+          tail -5 gitbash.log
+          echo "-- skipped under git bash --"
+          grep -c "skipped" gitbash.log
+          grep "skipped" gitbash.log | sort | uniq -c | sort -rn | head -40
+          echo "-- failures/errors under git bash --"
+          grep -E "^(FAIL|ERROR):" gitbash.log | head -60
+
+      - name: suite under pwsh for comparison
+        shell: pwsh
+        run: |
+          python -m unittest discover tests -v 2>&1 | Tee-Object pwsh.log | Select-Object -Last 5
+          Write-Host "-- skipped under pwsh --"
+          (Select-String -Path pwsh.log -Pattern "skipped").Count
+          exit 0
