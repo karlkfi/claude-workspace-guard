@@ -19,8 +19,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python3 -m unittest discover tests
 
-  # An ordinary gate since Q39: the suite passes on Windows. 72 tests skip
-  # there for want of $HOME (Q40) -- they run everywhere else.
+  # An ordinary gate since Q39: the suite passes on Windows. Some tests skip
+  # there for want of $HOME (Q43) -- they run everywhere else.
   unittest-windows:
     runs-on: windows-latest
     steps:

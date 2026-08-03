@@ -1,8 +1,9 @@
 # Q39 — make the remaining Windows test failures pass
 
-**Status: done.** Windows runs 804 tests with 0 failures and 0 errors
-(74 skipped). The ratchet in `scripts/windows-ratchet.py` and its baseline are
-retired; `unittest-windows` is an ordinary gating job.
+**Status: done.** Windows runs the suite with 0 failures and 0 errors. The
+ratchet in `scripts/windows-ratchet.py` and its baseline are retired;
+`unittest-windows` is an ordinary gating job. The remaining Windows skips are
+`$HOME`-driven and wait on Q43 (see finding 6).
 
 ## Goal
 
@@ -88,16 +89,19 @@ Fix: append `tempfile.gettempdir()` on Windows. This makes Windows agree with
 Linux, where `gettempdir()` is `/tmp` and already a root — so the behaviour is
 the one the green Linux matrix already verifies.
 
-### 6. `$HOME` is unset on Windows — 4 tests (deferred to Q40)
+### 6. `$HOME` is unset on Windows — 4 tests (deferred to Q43)
 
 All 3 errors were `KeyError: 'HOME'`, plus one failure asserting tilde
-expansion. Resolving the home directory on Windows is Q40, which is flagged as
-needing sign-off because a `USERPROFILE` fallback widens the allow set. These
-four now skip on Windows, matching the seven `skipTest("HOME not set")` sites
-the suite already had.
+expansion. These four now skip on Windows, matching the `skipTest("HOME not
+set")` sites the suite already had.
 
-72 of the 74 Windows skips are `$HOME`-driven and land when Q40 does; the other
-two are the POSIX-only temp-root layout test and the cmd.exe shim test.
+Q40 landed on `main` while this branch was in flight and fixed
+`claude_projects_dir()` to resolve the home directory with `expanduser`, which
+retired a large block of those skips. It did **not** touch `expand_tilde()`,
+which still reads `$HOME` only — so `cat ~/x` keeps its `~` on Windows and the
+hook defers where bash would expand. That is Q43, and it is what the remaining
+`$HOME`-driven skips (including these four) are waiting on. Skips are pointed at
+Q43 rather than Q40 for that reason.
 
 ## Out of scope
 

@@ -1469,7 +1469,7 @@ class HookEndToEndTests(unittest.TestCase):
         # an in-workspace path and should allow (previously a spurious ask).
         home = os.environ.get("HOME")
         if not home:
-            self.skipTest("HOME not set")                 # Windows: see Q40
+            self.skipTest("HOME not set")                 # Windows: see Q43
         with tempfile.TemporaryDirectory(dir=home) as ws:
             ws = os.path.realpath(ws)
             with open(os.path.join(ws, "in.txt"), "w") as f:
@@ -1482,7 +1482,7 @@ class HookEndToEndTests(unittest.TestCase):
         # path, so the subsequent relative read resolves in-workspace.
         home = os.environ.get("HOME")
         if not home:
-            self.skipTest("HOME not set")                 # Windows: see Q40
+            self.skipTest("HOME not set")                 # Windows: see Q43
         with tempfile.TemporaryDirectory(dir=home) as ws:
             ws = os.path.realpath(ws)
             with open(os.path.join(ws, "in.txt"), "w") as f:
@@ -1621,7 +1621,7 @@ class HookEndToEndTests(unittest.TestCase):
         # tracking follows them instead of dropping to ('unknown', None).
         home = os.environ.get("HOME")
         if not home:
-            self.skipTest("HOME not set")                 # Windows: see Q40
+            self.skipTest("HOME not set")                 # Windows: see Q43
         self.assertEqual(guard.classify_cd(["cd", "~"]), ("arg", home))
         self.assertEqual(
             guard.classify_cd(["cd", "~/foo"]),
@@ -3753,7 +3753,7 @@ class ReasonAdviceEndToEndTests(unittest.TestCase):
         # workspace, so the offender lands in the 'outside' bucket (not
         # 'expand') and gets the outside-path advice.
         if not os.environ.get("HOME"):
-            self.skipTest("HOME not set")                 # Windows: see Q40
+            self.skipTest("HOME not set")                 # Windows: see Q43
         r = self._reason("cat ~/.ssh/id_rsa")
         self.assertIn("~/.ssh/id_rsa", r)
         self.assertIn("same check", r)
