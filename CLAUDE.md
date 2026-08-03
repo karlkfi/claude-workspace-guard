@@ -32,6 +32,7 @@ Before introducing a new pattern or abstraction, check whether the existing `SPE
    - **Changed parsing behavior or `SPEC` table** → update the decision table in `README.md` and the "How it works" / "Limitations" sections.
    - **New configuration or hook surface** → `README.md` and `.claude-plugin/plugin.json` keywords/description.
    - Update `docs/STATUS.md`: remove the completed Queue row.
+   - **Re-read `gh pr list` before reporting Queue state.** Parallel sessions merge work mid-flight, so a listing from session start is stale by the end and "QN is the only item left" comes out wrong.
 5. **Commit when done** — small, focused, Conventional Commits. **Always commit `docs/STATUS.md` changes in their own isolated commit**, separate from code and plan-doc changes (see `docs/development/maintaining-backlog.md`).
 
 ## Code standards
