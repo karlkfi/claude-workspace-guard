@@ -15,7 +15,6 @@ Specific actionable items in priority order. Pick from the top; skip 🚫 items 
 
 | ID | Item | Labels | St | Sz | Notes |
 |---|---|---|---|---|---|
-| <a id="Q43"></a>Q43 | Expand a leading `~` from the resolved home, not just `$HOME` | `parsing` `bug` | 🔲 | S | `expand_tilde()` reads only `$HOME`, unset under cmd.exe, so `cat ~/x` keeps its `~` and the hook defers where bash expands. Fix: Q40's `expanduser`. Unskips 47 Windows tests; drop `--max-skips` to 3. |
 
 ## Deferred
 
