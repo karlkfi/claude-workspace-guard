@@ -79,7 +79,9 @@ Both were unknown when this was filed. Neither should be re-derived.
   reference does not document the PowerShell tool's input schema at all; this
   comes from strings in the installed binary (2.1.220), where
   `Cannot destructure property 'command' from null or undefined value` sits with
-  `PowerShellTool: exec spawn failed:`.
+  `PowerShellTool: exec spawn failed:`. Filed upstream as
+  [anthropics/claude-code#83647](https://github.com/anthropics/claude-code/issues/83647);
+  if that lands, cite the docs instead of the binary.
 
 That second one is source inspection, not an end-to-end run, and the repo treats
 those differently for good reason. So the handler must **not** treat a missing
