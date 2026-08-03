@@ -13,6 +13,7 @@ Three layers:
 """
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -2446,11 +2447,18 @@ class HookEndToEndTests(unittest.TestCase):
     # exist — the hook resolves lexically). Write commands must still prompt.
 
     def _claude_projects_path(self, *parts):
-        """Return a synthetic path under ~/.claude/projects/."""
+        """Return a synthetic path under ~/.claude/projects/, quoted for the shell.
+
+        Every caller interpolates the result into a command string. A Windows
+        path is separated by backslashes, which the hook's shlex pass strips as
+        escapes — the token collapses to a relative path that resolves inside
+        the workspace and flips the decision. shlex.quote is a no-op on a POSIX
+        path, so only the Windows shape changes.
+        """
         cpd = guard.claude_projects_dir()
         if cpd is None:
             self.skipTest("home not resolvable, skipping ~/.claude/projects/ tests")
-        return os.path.join(cpd, *parts)
+        return shlex.quote(os.path.join(cpd, *parts))
 
     def test_cat_claude_projects_allow(self):
         # Reading a workflow journal under ~/.claude/projects/ is allowed.
