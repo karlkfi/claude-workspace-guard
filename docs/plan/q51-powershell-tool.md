@@ -52,28 +52,48 @@ So this needs its own `SPEC`-equivalent table, not a reuse of the Bash one — a
 the repo's rule against aliasing a tool onto a row whose flag set diverges (see
 Q3 on `rg`) applies with force here.
 
-## The decision to make first
+## Posture — settled
 
-Secure-by-default says an unparseable command at the boundary should not be
-silently allowed. But the guard's standing rule is the opposite — defer on
-uncertainty, so normal permissions apply — and deferring on every PowerShell
-command is exactly today's behaviour.
+**Parse a known subset; defer on everything else.** This keeps the guard's
+standing rule (defer on uncertainty, so normal permissions apply) rather than
+carving out a stricter one for a shell the parser is weakest in.
 
-Three candidate shapes, to settle before writing code:
+The rejected alternative was `ask` on anything unparsed. It is the stricter
+reading, and for a plugin whose job is friction at the boundary it was a real
+candidate — but early on the table covers little, so nearly every command would
+prompt, and a guard that noisy gets disabled or blanket-allowed. Zero coverage
+with the plugin switched off is worse than partial coverage with it on.
 
-1. **Parse a subset, defer on the rest.** Matches the existing philosophy and
-   ships incrementally. Leaves an unparsed tail permanently unguarded.
-2. **Parse a subset, `ask` on the rest.** Secure by default, but prompts on
-   every unrecognised command, which is most of them early on.
-3. **Detect and warn.** Emit a one-time notice that shell commands are
-   unguarded in this configuration and point at Git for Windows.
+The consequence to be honest about in `README.md`: the unparsed tail stays
+unguarded, and that gap is invisible to the user.
 
-These are not exclusive: 3 is cheap and useful under either 1 or 2.
+## Wiring facts
+
+Both were unknown when this was filed. Neither should be re-derived.
+
+- **The matcher name is `PowerShell`.** The tools reference states its table
+  holds "the exact strings you use in permission rules, subagent tool lists, and
+  hook matchers", and lists `PowerShell` there.
+- **The command arrives as `tool_input.command`,** the same field Bash uses,
+  alongside `timeout`, `description`, and `run_in_background`. The hooks
+  reference does not document the PowerShell tool's input schema at all; this
+  comes from strings in the installed binary (2.1.220), where
+  `Cannot destructure property 'command' from null or undefined value` sits with
+  `PowerShellTool: exec spawn failed:`.
+
+That second one is source inspection, not an end-to-end run, and the repo treats
+those differently for good reason. So the handler must **not** treat a missing
+command field as ordinary uncertainty: silently deferring there is
+indistinguishable from the bug it would be hiding, and reproduces exactly the
+failure `run-python-hook.cmd` exists to prevent — a guard that reports itself
+active and enforces nothing. A `PowerShell` call whose command can't be read is
+a wiring failure and should `ask`, with a reason that says so.
 
 ## Acceptance criteria
 
 - A `PowerShell` matcher in `hooks/hooks.json` and a `PowerShell` branch in
   `main()` that never routes a PowerShell command through the POSIX tokenizer.
+- A `PowerShell` call with no readable command field emits `ask`, not silence.
 - `Get-Content`/`Set-Content`/`Out-File` and their aliases reach the same
   outside-workspace verdict as `cat`/`tee` do under Bash, with native paths
   (`C:\Users\…`) surviving tokenization intact.
