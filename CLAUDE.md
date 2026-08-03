@@ -69,7 +69,7 @@ Tests live in `tests/test_workspace_guard.py` (stdlib `unittest`, no third-party
 python3 -m unittest discover tests
 ```
 
-CI also runs the suite on Windows through `scripts/skip-ceiling.py`, an ordinary gate that additionally caps how many tests may skip (a skip reads as `OK` otherwise). Some skip there for want of `$HOME` (Q43); never widen a skip to get green, and tighten `--max-skips` in `.github/workflows/tests.yml` when the job says `IMPROVED`. Windows fixtures must quote interpolated native paths with the `sh()` helper (backslashes are shell escapes) and resolve leading-slash paths against the session cwd (they are drive-relative there).
+CI also runs the suite on Windows through `scripts/skip-ceiling.py`, an ordinary gate that additionally caps how many tests may skip (a skip reads as `OK` otherwise). Some skip there for want of `$HOME` (Q43); never widen a skip to get green, and tighten `--max-skips` in `.github/workflows/tests.yml` when the job says `IMPROVED`. Windows fixtures must quote interpolated native paths — `sh()` for bash fixtures, `ps()` for PowerShell ones (`sh()` is `shlex.quote`, POSIX quoting) — and resolve leading-slash paths against the session cwd (they are drive-relative there). **A Windows-absolute path is not absolute to `os.path` on a POSIX host**, so a fixture that lets one resolve cwd-relative lands it *inside* the project root and passes while asserting the silent allow it meant to catch.
 
 Two layers:
 - **Unit tests** import `files_in_command` from the script and exercise per-`SPEC`-row parsing, `prog_suppressed_by`, `--opt=val`, end-of-options `--`, and aliases.
