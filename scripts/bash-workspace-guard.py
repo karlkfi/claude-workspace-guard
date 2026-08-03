@@ -311,7 +311,9 @@ def path_at_or_under(rp, root):
 # every session/process and every worktree, colliding between concurrent runs
 # and living outside the project root. Such a path gets a stronger, constructive
 # `deny` (steering to a repo-local gitignored scratch dir) instead of the usual
-# outside-workspace `ask`. The list is extensible; see host_temp_roots().
+# outside-workspace `ask`. These are the POSIX names; the platform's own temp
+# dir is added by host_temp_roots(), which is what covers Windows. The list is
+# extensible; see host_temp_roots().
 HOST_TEMP_DEFAULT_ROOTS = ('/tmp', '/var/tmp')
 
 
@@ -369,6 +371,16 @@ def host_temp_roots(base):
     tmpdir = os.environ.get('TMPDIR')
     if tmpdir:
         raw.append(tmpdir)
+    # Windows has no $TMPDIR, and its host-wide temp dir is %TMP%/%TEMP% —
+    # which the POSIX names above miss entirely, so a scratch write to the one
+    # directory this tier exists to catch got a plain `ask` instead of the
+    # steered `deny`. tempfile.gettempdir() is where that lands. Gated on the
+    # same discriminator as claude_tmp_root() (which already pays for the call
+    # there): the missing $TMPDIR is the actual condition, and on POSIX
+    # gettempdir() would only re-derive $TMPDIR-or-/tmp while adding its probe
+    # to every Bash call.
+    if not hasattr(os, 'getuid'):
+        raw.append(tempfile.gettempdir())
     out = set()
     for r in raw:
         if not r:

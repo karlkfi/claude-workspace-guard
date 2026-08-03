@@ -3832,6 +3832,13 @@ class HostTempHelperTests(unittest.TestCase):
         self.assertIn(os.path.realpath("/tmp"), roots)
         self.assertIn(os.path.realpath("/var/tmp"), roots)
 
+    def test_host_temp_roots_includes_platform_temp_dir(self):
+        # The directory this tier exists to catch. On POSIX it is
+        # $TMPDIR-or-/tmp and already among the defaults; on Windows it is
+        # %TMP%, which the POSIX names miss entirely.
+        roots = guard.host_temp_roots(os.getcwd())
+        self.assertIn(os.path.realpath(tempfile.gettempdir()), roots)
+
     def test_build_scratch_hint_present_vs_absent(self):
         with tempfile.TemporaryDirectory() as proj:
             # No scratch dir yet -> "create it" guidance.
