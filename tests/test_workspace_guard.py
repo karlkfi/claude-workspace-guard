@@ -4554,8 +4554,16 @@ class LiteralAssignmentValueTests(unittest.TestCase):
     def test_leading_tilde_slash_expands_to_home(self):
         home = guard.resolved_home()                      # Q43: not $HOME
         self.assertIsNotNone(home, "no home directory resolves")
-        self.assertEqual(
-            guard.literal_assignment_value("~/x"), os.path.join(home, "x"))
+        got = guard.literal_assignment_value("~/x")
+        if ":" in home:
+            # A Windows home carries a drive colon, and `:` is impure so an
+            # exotic inherited IFS can't split a PATH-style value. The tilde
+            # does expand (see TildeExpansionUnitTests) — the result just isn't
+            # usable as a literal, so the var stays poisoned and the read asks.
+            # Pre-dates Q43: a literal `f=C:\proj\x` is None for the same reason.
+            self.assertIsNone(got)
+        else:
+            self.assertEqual(got, os.path.join(home, "x"))
 
     def test_tilde_user_impure(self):
         self.assertIsNone(guard.literal_assignment_value("~someuser/x"))
@@ -4759,8 +4767,11 @@ class LiteralForItemTests(unittest.TestCase):
     def test_tilde_slash_expands(self):
         home = guard.resolved_home()                      # Q43: not $HOME
         self.assertIsNotNone(home, "no home directory resolves")
-        self.assertEqual(
-            guard.literal_for_item("~/x"), os.path.join(home, "x"))
+        got = guard.literal_for_item("~/x")
+        if ":" in home:
+            self.assertIsNone(got)     # Windows drive colon is impure — as above
+        else:
+            self.assertEqual(got, os.path.join(home, "x"))
 
 
 class ForLoopBindingTests(unittest.TestCase):
