@@ -358,7 +358,8 @@ def resolve_from(base, raw):
 def host_temp_roots(base):
     """Resolved set of host-temp roots: the defaults, any extra roots from
     ``WORKSPACE_GUARD_TMP_ROOTS`` (additive — never replaces the defaults, so the
-    boundary can't be weakened by clearing it), and ``$TMPDIR`` if set.
+    boundary can't be weakened by clearing it), ``$TMPDIR`` if set, and on
+    Windows the platform temp dir the POSIX names don't cover.
 
     Each root goes through :func:`resolve_from` against ``base`` (the tool's
     cwd), so a path under macOS's ``/tmp -> /private/tmp`` symlink or a

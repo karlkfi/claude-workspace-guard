@@ -1,6 +1,0 @@
-{
-  "failures": 0,
-  "errors": 0,
-  "measured_on": "claude/q39-7a8008, windows-latest 10.0.26100, python 3.13",
-  "note": "Q39 landed: the suite passes on Windows. At 0/0 the ratchet is an ordinary gate, and is retired once this is confirmed green. Never raise these to get green."
-}
