@@ -4138,23 +4138,33 @@ def ps_statement_kills(segments, ctx):
     The signal flag counts a kill that earns no offender — one by literal pid,
     or one the anchor cleared — because suppressing the caller's blanket `allow`
     is exactly what those cases need (Q59).
+
+    A `taskkill` segment is judged here too, but on its OWN tokens: it reads no
+    pipeline, so an anchor upstream of it selects nothing it kills. It shares
+    this function only so one place answers "did this statement signal" (Q58).
     """
-    kills, signal = [], False
+    kills, signal, offenders = [], False, []
     for seg in segments:
-        kl = ps_classify_kill(ps_strip_head([t for t in seg if t[0] == 'word']))
+        words = ps_strip_head([t for t in seg if t[0] == 'word'])
+        tk = classify_taskkill([w[1] for w in words])
+        if tk is not None:
+            signal = True
+            offenders.extend(ps_taskkill_offenders(words, tk, ctx))
+            continue
+        kl = ps_classify_kill(words)
         if kl is None:
             continue
         signal = True
         if kl[0] != 'pid':
             kills.append(kl)
     if not kills:
-        return [], signal
+        return offenders, signal
     anchored = any(ps_kill_operand_anchored(t[1], t[2], ctx.kill_anchor)
                    for seg in segments for t in seg if t[0] == 'word')
-    offenders = [('Stop-Process', 'kill',
-                  {'cmd': 'Stop-Process', 'root': ctx.proj, 'shell': 'powershell',
-                   'pattern': ' '.join(selectors) or None})
-                 for mode, selectors in kills if mode == 'name' or not anchored]
+    offenders += [('Stop-Process', 'kill',
+                   {'cmd': 'Stop-Process', 'root': ctx.proj, 'shell': 'powershell',
+                    'pattern': ' '.join(selectors) or None})
+                  for mode, selectors in kills if mode == 'name' or not anchored]
     return offenders, signal
 
 
@@ -4196,17 +4206,10 @@ def ps_analyze_segment(tokens, ctx, cwd, cwd_unknown):
         i += 1
 
     words = ps_strip_head(words)
-    guarded, offenders = False, []
+    guarded = False
     if words:
         name = PS_ALIASES.get(words[0][1].lower(), words[0][1].lower())
-        tk = classify_taskkill([w[1] for w in words])
-        if tk is not None:
-            # Judged here rather than in `ps_statement_kills` because `taskkill`
-            # reads no pipeline: its selection is entirely in its own arguments,
-            # so a `Where-Object` upstream of it anchors nothing. A kill never
-            # sets `guarded`, same as `Stop-Process`.
-            offenders.extend(ps_taskkill_offenders(words, tk, ctx))
-        elif name in PS_LOCATION_CMDS:
+        if name in PS_LOCATION_CMDS:
             cwd, cwd_unknown = ps_apply_location(words, cwd, cwd_unknown)
         else:
             spec = PS_SPEC.get(name)
@@ -4214,6 +4217,7 @@ def ps_analyze_segment(tokens, ctx, cwd, cwd_unknown):
                 guarded = True
                 files.extend(ps_bind_args(words[1:], spec))
 
+    offenders = []
     for tok, exp, quoted, role in files:
         if exp:
             offenders.append((tok, 'expand', None))

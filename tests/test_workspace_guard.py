@@ -7454,6 +7454,24 @@ class PowerShellTaskkillEndToEndTests(PowerShellKillFixture, unittest.TestCase):
         self._decision("taskkill /IM node.exe", "deny",
                        permission_mode="bypassPermissions")
 
+    def test_a_clean_guarded_cmdlet_never_speaks_for_a_taskkill(self):
+        # Q59's suppression has to reach this kill too: `taskkill /PID 1234`
+        # earns no offender, which is exactly what leaves it available for a
+        # clean `Get-Content` to launder into a blanket `allow`.
+        for cmd in (r"Get-Content .\in.txt; taskkill /PID 1234",
+                    r"taskkill /PID 1234; Get-Content .\in.txt",
+                    r"Get-Content .\in.txt | taskkill /PID 1234",
+                    r"Get-Content .\in.txt; $(taskkill /PID 1234)"):
+            self._decision(cmd, "defer")
+
+    def test_a_help_invocation_does_not_suppress_the_allow(self):
+        # `taskkill /?` kills nothing, so there is no kill to speak for.
+        self._decision(r"Get-Content .\in.txt; taskkill /?", "allow")
+
+    def test_an_offending_taskkill_outranks_a_clean_cmdlet(self):
+        # Suppression removes the `allow`; it must not also swallow the deny.
+        self._decision(r"Get-Content .\in.txt; taskkill /IM node.exe", "deny")
+
 
 class PowerShellEndToEndTests(unittest.TestCase):
     """Decisions the script emits for `tool_name: PowerShell`.

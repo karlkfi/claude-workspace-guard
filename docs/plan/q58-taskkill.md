@@ -66,6 +66,11 @@ same command.
   list of plain strings would drop.
 - `SIGNAL_CMDS`, which `taskkill` joins so a clean guarded command in the same
   bash string can't launder it into a blanket `allow`.
+- Q59's PowerShell counterpart of that suppression. `taskkill` is classified
+  inside `ps_statement_kills` — on its own segment's tokens, so the anchor scope
+  above still holds — because that is the one place answering "did this statement
+  signal a process". Landing it anywhere else would have re-opened, for
+  `taskkill`, the hole Q59 had just closed for `Stop-Process`.
 
 New: `native_cmd_name`, the Windows-shaped command-word normalizer (basename,
 lowercased, `.exe` dropped), and a third fix sentence in `build_kill_hint` —
@@ -74,10 +79,6 @@ rewrite for this command.
 
 ## Deliberate limitations
 
-- **PowerShell still lets a clean cmdlet launder a `taskkill` by pid.**
-  `Get-Content .\in.txt; taskkill /PID 1234` emits `allow`, exactly as it does
-  for `Stop-Process -Id 1234`. That is Q59, which this change widens rather than
-  fixes; the bash side is covered via `SIGNAL_CMDS`.
 - **`/FI "PID eq 1234"` denies** even though the pid is literal. Parsing filter
   expressions means a grammar per filter keyword; the rewrite (`/PID 1234`) is
   the first thing the message names.
@@ -92,14 +93,14 @@ rewrite for this command.
 - [x] `scripts/bash-workspace-guard.py` — `TASKKILL_CMDS` / `TASKKILL_CONSUME` /
       `TASKKILL_SELECTORS` / `TASKKILL_FLAG_RE`, `native_cmd_name`,
       `classify_taskkill`, `ps_taskkill_offenders`, `taskkill` in `SIGNAL_CMDS`,
-      call sites in `_analyze_command` and `ps_analyze_segment`, third fix branch
+      call sites in `_analyze_command` and `ps_statement_kills`, third fix branch
       in `build_kill_hint`.
 - [x] Tests — unit (flag prefixes, case, `.exe`, selector classification, `/?`,
       value-flag consumption) + e2e on both frontends (`/IM` deny, `/FI` deny,
       bare `taskkill` deny, `/PID` defer, anchored filter defer, override
-      downgrade, laundering through a clean `cat`). The PowerShell kill harness
-      became `PowerShellKillFixture`, shared by the `Stop-Process` and `taskkill`
-      suites.
+      downgrade, laundering through a clean `cat` / `Get-Content`). The PowerShell
+      kill harness became `PowerShellKillFixture`, shared by the `Stop-Process`
+      and `taskkill` suites.
 - [x] `README.md` — decision-table rows on both tables, the kill section, How it
       works step 13, Limitations, agent-guidance bullet, PowerShell coverage.
 - [x] `.claude-plugin/plugin.json` — nothing; `windows`, `pkill` and `process`

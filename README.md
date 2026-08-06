@@ -264,6 +264,7 @@ Windows' own `taskkill`.
 | `taskkill /IM node.exe`                        | **deny** |
 | `Stop-Process -Id 1234` · `taskkill /PID 1234` | defer    |
 | `Get-Content .\in.txt; Stop-Process -Id 1234`  | defer    |
+| `Get-Content .\in.txt; taskkill /PID 1234`     | defer    |
 | `Get-ChildItem C:\out` (not a guarded cmdlet)  | defer    |
 | `Get-Content "unterminated` (unparseable)      | defer    |
 
@@ -867,12 +868,12 @@ through the same boundary rules and produce the same reasons. Symlink staging
    [Unanchored process-kill deny](#unanchored-process-kill-deny).
    The same step covers a kill fed by a pattern rather than named by one, in the
    Bash tool. Any signalling command in the string (`kill`, `pkill`, `killall`,
-   `taskkill`, directly or as an `xargs` command word) suppresses the blanket `allow` a clean
-   guarded command would otherwise earn, so a `grep` can never carry an
-   `xargs kill` past your permission settings — `allow` speaks for the whole
-   string. A `Stop-Process` suppresses the PowerShell `allow` the same way,
-   including one this step had no cause to deny and one written inside a `$(…)`
-   body. And the pattern
+   `taskkill`, directly or as an `xargs` command word) suppresses the blanket
+   `allow` a clean guarded command would otherwise earn, so a `grep` can never
+   carry an `xargs kill` past your permission settings — `allow` speaks for the
+   whole string. A `Stop-Process` or a `taskkill` suppresses the PowerShell
+   `allow` the same way, including one this step had no cause to deny and one
+   written inside a `$(…)` body. And the pattern
    operands of the pid *sources* — `pgrep`'s, and those of a `grep` in a pipeline
    that also contains `ps` — go through the anchor test above; a `kill` whose
    operands aren't all literal pids, with no anchoring pattern anywhere in the
