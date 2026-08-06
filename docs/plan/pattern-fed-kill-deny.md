@@ -121,11 +121,12 @@ pid it derived some other way; `WORKSPACE_GUARD_OVERRIDE=<reason>` covers it.
 * **A filter that isn't grep is invisible.** `ps … | awk '/ginkgo/ {print $1}' |
   xargs kill` collects no pattern, so it defers rather than denies. Treating an
   `awk` program as a pattern would make the common `awk '{print $1}'` an
-  unanchorable pattern and deny every correctly anchored pipeline. Queued as Q58.
+  unanchorable pattern and deny every correctly anchored pipeline. Queued as Q60.
 * **A kill inside a quoted `sh -c` string** (`xargs -I{} sh -c 'kill {}'`) is one
   token to the tokenizer, so it reads as neither a signal nor a launderable kill.
-* **Bash only**, like the rest of the kill handling. PowerShell's `Stop-Process`
-  remains Q57.
+* **Bash only.** PowerShell's `Stop-Process` got its own anchor rule in PR 130,
+  but not the `allow` suppression of Part 1 — a clean `Get-Content` in the same
+  statement still speaks for the kill there. That half is Q59.
 
 ## One rule the smoke tests forced
 
@@ -150,8 +151,7 @@ anchor, and reporting nothing there would have read as "not a pid source".
       What-it-does, How-it-works step 13, Limitations, agent-guidance bullet.
 - [x] `docs/design.md` — why `allow` speaking for a whole string is the general
       lesson, and why the literal-pid rule is the narrow part.
-- [x] `docs/STATUS.md` — Q58 for the non-grep filter gap; resolved the duplicate
-      `Q56` id PR 128 introduced (PowerShell row → Q57) and the two lint
-      failures that came with it.
+- [x] `docs/STATUS.md` — Q60 for the non-grep filter gap; Q59 narrowed to the
+      PowerShell half of the `allow` suppression, which this change leaves open.
 - [x] `.claude-plugin/plugin.json` — nothing; `pkill` and `process` already
       cover this.

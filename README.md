@@ -823,11 +823,12 @@ through the same boundary rules and produce the same reasons. Symlink staging
    looked for across the whole statement there, since the anchored form is a
    `Where-Object` filter upstream in the pipeline. See
    [Unanchored process-kill deny](#unanchored-process-kill-deny).
-   The same step covers a kill fed by a pattern rather than named by one. Any
-   signalling command in the string (`kill`, `pkill`, `killall`, directly or as
-   an `xargs` command word) suppresses the blanket `allow` a clean guarded
-   command would otherwise earn, so a `grep` can never carry an `xargs kill` past
-   your permission settings — `allow` speaks for the whole string. And the pattern
+   The same step covers a kill fed by a pattern rather than named by one, in the
+   Bash tool. Any signalling command in the string (`kill`, `pkill`, `killall`,
+   directly or as an `xargs` command word) suppresses the blanket `allow` a clean
+   guarded command would otherwise earn, so a `grep` can never carry an
+   `xargs kill` past your permission settings — `allow` speaks for the whole
+   string. (The PowerShell frontend does not do this yet.) And the pattern
    operands of the pid *sources* — `pgrep`'s, and those of a `grep` in a pipeline
    that also contains `ps` — go through the anchor test above; a `kill` whose
    operands aren't all literal pids, with no anchoring pattern anywhere in the
