@@ -150,13 +150,13 @@ a shell `-c` that the guard used to vouch for and now declines to.
 
 ## Deliverables
 
-- [ ] `scripts/bash-workspace-guard.py` — `SHELL_C_CMDS`, `shell_c_group`,
+- [x] `scripts/bash-workspace-guard.py` — `SHELL_C_CMDS`, `shell_c_group`,
       `kill_pipes` tracking, the ps-source contribution, the `guarded` clear.
-- [ ] Tests — unit (shell `-c` detection incl. the `--version` negative, the
+- [x] Tests — unit (shell `-c` detection incl. the `--version` negative, the
       pipeline-flow rule) + e2e (the measured shapes, the background-child
       idiom, anchored pipelines, the substitution boundary, override, bypass).
-- [ ] `README.md` — decision-table rows, the "Kills fed by a pattern" subsection,
+- [x] `README.md` — decision-table rows, the "Kills fed by a pattern" subsection,
       How-it-works, Limitations.
-- [ ] `docs/design.md` — why the source is `ps` and not the filter.
-- [ ] `docs/STATUS.md` — drop Q60; queue the `sh -c` body analysis, the dead
-      `MAX_SUBST_DEPTH`, and the `kill -0` false positive.
+- [x] `docs/design.md` — why the source is `ps` and not the filter.
+- [x] `docs/STATUS.md` — drop Q60; queue the `sh -c` body analysis (Q61), the
+      `kill -0` false positive (Q62), and the dead `MAX_SUBST_DEPTH` (Q63).
