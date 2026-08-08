@@ -7,7 +7,9 @@ on:
     types: [opened, edited, synchronize, reopened]
 
 jobs:
-  answered:
+  # The job id is the name that shows up in the checks list and in branch
+  # protection's required-checks picker, so it matches what the docs call it.
+  release-note:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
