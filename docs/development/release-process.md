@@ -92,16 +92,30 @@ Every PR body ends with a `## Release note` block — see [`.github/pull_request
 
 ```
 for pr in $(git log --oneline v<PREV>..HEAD | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+'); do
-  note=$(gh pr view "$pr" --json body --jq .body \
+  body=$(gh pr view "$pr" --json body --jq .body)
+  if ! printf '%s\n' "$body" | grep -q '^## Release note'; then
+    printf '#%s  !! NO SECTION\n' "$pr"
+    continue
+  fi
+  note=$(printf '%s\n' "$body" \
     | awk '/^## Release note/{f=1;next} /^## /{f=0} f' \
     | awk '/<!--/{c=1} !c; /-->/{c=0}' | grep -v '^[[:space:]]*$')
-  printf '#%s  %s\n' "$pr" "${note:-(no release-note block)}"
+  printf '#%s  %s\n' "$pr" "${note:-!! UNANSWERED}"
 done
 ```
 
 The second `awk` drops the template's instructions, which stay in the body as an HTML comment even when the author fills the section in.
 
-Read the two empty answers differently. `None` is an answer: the author weighed it and nothing is user-facing, so fold that PR into the changelog link. `(no release-note block)` is a gap — nobody was asked, or nobody answered — so reconstruct that one from its diff, the way every release before this template was written.
+Three of the four outcomes are answers; two are not, and they fail differently:
+
+| output | meaning | what to do |
+|---|---|---|
+| a note line | the hook behaves differently for someone running it | it is the bullet — edit for the release's voice, don't rewrite from the diff |
+| `None` | no decision moved, nothing an operator sees changed | fold the PR into the changelog link |
+| `!! UNANSWERED` | the section is there and empty — nobody answered it | read the diff, and treat a decision change found this way as a near miss |
+| `!! NO SECTION` | no section at all: the PR predates this template, or the author dropped it | reconstruct from the diff, the way every release before the template was written |
+
+`None` is a claim about the release notes, not about the code — it says "this PR needs no bullet." That is what makes it checkable at tag time: a `None` sitting next to a diff that moves a decision is a mistake you can actually see.
 
 To enumerate what shipped since the last tag, and to catch anything the harvest missed:
 
