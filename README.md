@@ -1449,11 +1449,21 @@ final output.
   never widens the boundary). A session with no `session_id` (older CLIs)
   disables both allows entirely.
 - In non-interactive / headless runs there is no one to answer an `ask` prompt,
-  so an `ask` still **blocks** the command (verified on CLI 2.1.159 — it does
-  not silently allow). Under `--dangerously-skip-permissions`
-  (`bypassPermissions`) the hook emits `deny` rather than `ask` for
-  outside-workspace paths: equally blocking, but the agent receives the reason
-  and can recover instead of stalling. See [Configuration](#configuration).
+  so an `ask` still **blocks** the command (re-verified on CLI 2.1.220 across
+  all six permission modes — it does not silently allow). Under
+  `--dangerously-skip-permissions` (`bypassPermissions`) the hook emits `deny`
+  rather than `ask` for outside-workspace paths: equally blocking, but the agent
+  receives the reason and can recover instead of stalling. See
+  [Configuration](#configuration).
+- **How much the hook protects you depends on your permission mode.** `ask` and
+  `deny` block in every mode, but a *deferred* command — one the hook declines
+  to judge — runs silently under `auto`, `acceptEdits`, and `bypassPermissions`,
+  and is blocked only under `manual`, `dontAsk`, and `plan`. So the mechanisms
+  that work by declining to vouch (the suppressions described in step 16) add
+  protection only in the latter group; in a pre-approving mode they hand the
+  decision back to rules that already said yes. The measured matrix, and which
+  decision is the right one per mode, are in
+  [`docs/permission-modes.md`](docs/permission-modes.md).
 - The host-temp `deny` covers guarded-command file arguments, redirect targets
   from any command (`go test > /tmp/log`), a `cd` into host temp followed by a
   relative write, `mktemp` (its default location is host temp), and — as of the

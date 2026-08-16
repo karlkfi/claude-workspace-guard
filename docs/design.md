@@ -13,6 +13,8 @@ The naive alternatives don't work:
 
 The right granularity is **per file argument**, not per command. That's what this plugin adds.
 
+This framing assumes an operator who *has* pre-approved those readers, so the hook's job is to narrow a permission that already exists. Plenty of operators deliberately run with no permission rules at all, on the view that a glob-matched allowlist is too blunt to trust — and for them the relationship inverts: the hook's `allow` grants access nothing else granted. The hook cannot tell the two apart, so `allow` is spent as if it were a grant. See [`permission-modes.md`](permission-modes.md).
+
 ## Approach
 
 A `PreToolUse` hook on `Bash` that:
@@ -48,6 +50,8 @@ Unparseable commands, commands not in `SPEC`, empty input — all return no deci
 - Failing closed (deny on parse error) would block legitimate work and train users to disable the hook.
 - Failing open with a silent `allow` would mask security regressions.
 - Defer is net-neutral: the user is no worse off than without the hook.
+
+**That last point is weaker than it reads, and the difference is measured.** Defer hands control back to the permission system, so it is protective only where that system would stop something. In `auto`, `acceptEdits`, and `bypassPermissions` a deferred command simply runs — so every "the hook declines to vouch, so it defers" mechanism in this plugin is inert in exactly the modes that pre-approve the most. "No worse off than without the hook" is true; in a pre-approving mode it means unprotected. See [`permission-modes.md`](permission-modes.md) for the full matrix, and treat it as a precondition when choosing any decision.
 
 This is the asymmetry behind the "secure by default" principle the plugin holds itself to: adding friction is cheap, removing it requires sign-off.
 
