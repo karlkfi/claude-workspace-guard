@@ -329,6 +329,40 @@ def claude_projects_dir():
         return None
 
 
+def claude_code_dirs():
+    """Realpaths of Claude Code's installed-extension dirs, ``~/.claude/plugins/``
+    and ``~/.claude/skills/``.
+
+    Exempt from the workspace check for **reads** on the same trust boundary the
+    plugin itself rests on: this code is installed by the user, deliberately, and
+    a user who can rewrite it has already won (see `docs/security-notes.md`,
+    "Hook input trust"). The exemption is load-bearing rather than a convenience
+    — 82% of all outside-root interpreter script arguments in a measured corpus
+    were plugin scripts a hook or skill launched (`pr-sentinel-watch.sh` and the
+    like), so without it the interpreter check would prompt on the extension
+    ecosystem constantly and be turned off.
+
+    Reads only: a *write* into installed plugin code is not routine and keeps
+    its prompt. Returns the dirs that resolve; an unresolvable home yields none.
+
+    The exemption keys on where a file REALLY is, because every file argument is
+    compared after ``realpath``. A skill symlinked out to a working repo (a
+    common layout: ``~/.claude/skills/foo -> ~/workspace/skills/foo``) therefore
+    resolves to the repo and is NOT exempt — correctly, since that is an ordinary
+    cross-repo read, and an exempt directory must not launder a symlink into one.
+    """
+    home = resolved_home()
+    if home is None:
+        return []
+    out = []
+    for name in ('plugins', 'skills'):
+        try:
+            out.append(os.path.realpath(os.path.join(home, '.claude', name)))
+        except OSError:
+            pass
+    return out
+
+
 def allowed_read_prefixes(base):
     """Resolved list of absolute path prefixes exempt from the workspace check
     for **read-only** guarded commands (see WRITE_COMMANDS for exclusions).
@@ -346,6 +380,7 @@ def allowed_read_prefixes(base):
     cpd = claude_projects_dir()
     if cpd:
         defaults.append(cpd)
+    defaults.extend(claude_code_dirs())
     extras = _split_pathlist(os.environ.get('WORKSPACE_GUARD_READ_ALLOW_PREFIXES', ''))
     out = []
     for p in defaults + extras:
@@ -3490,9 +3525,25 @@ def _analyze_command(cmd, ctx, base_cwd, depth=0, in_subst=False, seed_vars=None
             if kind == 'inline':
                 signal = signal or 'interpreter'
             else:
-                k, rp = resolve_token(tok, group_cwd, group_cwd_unknown)
-                if k != 'path' or path_is_outside(rp, ctx.proj):
+                # A script operand is a file the interpreter reads, so it is
+                # checked like any other read. That matters far more than the
+                # suppression beside it: an offender emits `ask`/`deny`, which
+                # block in EVERY permission mode, while a suppression only
+                # withholds `allow` — and a withheld `allow` still runs under
+                # `auto`, `acceptEdits`, and `bypassPermissions`
+                # (`docs/permission-modes.md`). Read exemptions apply, which is
+                # what keeps installed plugin and skill code quiet.
+                o = check_file(tok, group_cwd, group_cwd_unknown, is_read=True)
+                if o is not None:
+                    outside.append(o)
                     signal = signal or 'interpreter'
+                else:
+                    # Exempt or in-workspace. Vouch only for the workspace case:
+                    # an exempt prefix earns silence, not the hook's word for
+                    # everything else in the string.
+                    k, rp = resolve_token(tok, group_cwd, group_cwd_unknown)
+                    if k != 'path' or path_is_outside(rp, ctx.proj):
+                        signal = signal or 'interpreter'
         # The body is readable after all when it is a command string this host
         # runs — queued whatever the classification above landed on, since the
         # two answer different questions. Skipped once the cwd is untracked: the

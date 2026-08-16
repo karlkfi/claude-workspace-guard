@@ -1213,8 +1213,21 @@ A set of path prefixes are always allowed for **read-only** guarded commands
 write-mode flag (`sed -i`, gawk `-i inplace`, `yq -i`, `sort -o`), and the
 positional output file of `uniq IN OUT` / `xxd IN OUT` are never exempt.
 
-The built-in default is `~/.claude/projects/` (Claude Code's own session and
-sub-agent data). You can extend it with additional prefixes:
+The built-in defaults are `~/.claude/projects/` (Claude Code's own session and
+sub-agent data) and `~/.claude/plugins/` + `~/.claude/skills/` (installed
+extension code). The extension dirs rest on the same trust boundary as the
+plugin itself — that code is installed by the user, deliberately — and they are
+load-bearing rather than a convenience: a hook or skill routinely launches its
+own scripts by absolute path, so without the exemption every such launch would
+prompt.
+
+The exemption keys on where a file **really** is, because file arguments are
+compared after `realpath`. A skill symlinked out to a working repo
+(`~/.claude/skills/foo -> ~/workspace/skills/foo`, a common layout) resolves to
+the repo and is *not* exempt — correctly, since that is an ordinary cross-repo
+read, and an exempt directory must never launder a symlink into one.
+
+You can extend the defaults with additional prefixes:
 
 | Env var | Default | Effect |
 | --- | --- | --- |
@@ -1307,13 +1320,21 @@ final output.
   touches. This is the [documented threat model](docs/design.md) rather than an
   oversight — the plugin closes a granularity gap in *pre-approved file
   readers*, and it does not try to model every program that can open a file.
-  What the hook does guarantee is that it never **vouches** for such a command:
-  interpreter code suppresses the blanket `allow` a clean guarded command in the
-  same string would otherwise earn, so your own permission rules still get their
-  say. Two residuals remain, both erring toward silence: `python3 -m <module>`
-  is not treated as inline code, and the PowerShell tool does not yet apply this
-  suppression. If you want interpreters gated, that is a permission rule
-  (`Bash(python3:*)`), not a hook decision.
+  What the hook *does* check is the **script path** an interpreter is told to
+  run — `python3 <path>` reads that file, so it is checked like any other read
+  and an outside-workspace script gets the usual `ask`. Installed extension code
+  is read-exempt (see [Allowed read prefixes](#allowed-read-prefixes)), which is
+  what keeps a hook launching its own script quiet.
+  Separately, interpreter code suppresses the blanket `allow` a clean guarded
+  command in the same string would otherwise earn, so the hook never vouches for
+  code it cannot read. Note the asymmetry: the path check produces a real
+  decision that blocks in every permission mode, while the suppression only
+  withholds `allow` and so protects nothing under `auto`, `acceptEdits`, or
+  `bypassPermissions` — see
+  [`docs/permission-modes.md`](docs/permission-modes.md).
+  Residuals, all erring toward silence: inline code (`python3 -c`, a heredoc)
+  carries no path to check, `python3 -m <module>` is not treated as inline, and
+  the PowerShell tool does not yet apply the suppression.
 - A leading `~`/`~/…` is expanded to your home directory (bash does this
   deterministically), so a home path inside the root is allowed. Tokens that
   bash would expand *unpredictably* at runtime — `~user`/`~+`/`~-`, or a `$`
