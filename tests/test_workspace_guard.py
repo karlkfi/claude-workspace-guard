@@ -5868,6 +5868,111 @@ class ShellCSuppressesAllowTests(unittest.TestCase):
         self._decision("grep -c foo in.txt", "allow")
 
 
+class InterpreterSuppressesAllowTests(unittest.TestCase):
+    """A clean guarded command never speaks for interpreter code (Q72).
+
+    `shell_c_group`'s rule one layer out. Measured at 0219b04:
+    `cat README.md && python3 -c '…'` came back `allow`, so the hook was
+    short-circuiting the user's own permission settings on arbitrary code — the
+    same defect Q60 fixed for `sh -c`, in a spelling `SHELL_C_CMDS` misses.
+
+    Interpreters stay out of `SPEC`: deferring on a bare `python3 x.py` is the
+    documented threat model. Only the blanket `allow` is withdrawn, and only for
+    code the hook cannot read — a script resolving *inside* the workspace is
+    repo-resident and still allows. Targets are synthetic (repo rule); nothing
+    here is ever executed.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.workspace = os.path.realpath(self._tmp.name)
+        with open(os.path.join(self.workspace, "in.txt"), "w") as f:
+            f.write("hello\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _decision(self, cmd, expected):
+        out = run_hook(cmd, self.workspace, project_dir=self.workspace)
+        if expected == "defer":
+            self.assertIsNone(out, f"expected defer for {cmd!r}, got {out!r}")
+            return
+        self.assertIsNotNone(out, f"expected a decision, got defer for: {cmd!r}")
+        got = out["hookSpecificOutput"]["permissionDecision"]
+        self.assertEqual(got, expected, f"expected {expected!r} for {cmd!r}")
+
+    def test_inline_code_suppresses_the_allow(self):
+        # `-c` for python, `-e` for the perl/ruby/node family, and both read off
+        # short-option clusters so `perl -pe` and `perl -0pi -e` fire too.
+        for cmd in ("cat in.txt && python3 -c 'import os'",
+                    "cat in.txt && perl -e 'print 1'",
+                    "cat in.txt && perl -pe 's/a/b/' in.txt",
+                    "cat in.txt && perl -0pi -e 's/a/b/' in.txt",
+                    "cat in.txt && ruby -e 'puts 1'",
+                    "cat in.txt && node -e 'console.log(1)'"):
+            self._decision(cmd, "defer")
+
+    def test_stdin_and_heredoc_bodies_suppress_the_allow(self):
+        # The heredoc body is stripped before shlex, so the hook has nothing to
+        # read — the same blind spot as a `-c` operand, and far more common.
+        for cmd in ("cat in.txt && python3 - <<'PY'\nimport os\nPY",
+                    "cat in.txt && python3 <<'PY'\nimport os\nPY",
+                    "cat in.txt && python3"):
+            self._decision(cmd, "defer")
+
+    def test_a_script_outside_the_workspace_suppresses_the_allow(self):
+        for cmd in ("cat in.txt && python3 /q72-fake-target/x.py",
+                    "cat in.txt && bash /q72-fake-target/x.sh",
+                    "cat in.txt && ruby /q72-fake-target/x.rb"):
+            self._decision(cmd, "defer")
+
+    def test_a_workspace_resident_script_still_allows(self):
+        # Repo-resident code is what the boundary already trusts; exempting it
+        # is what keeps this rule from costing far more friction than it buys.
+        for cmd in ("cat in.txt && python3 ./scripts/run.py",
+                    "cat in.txt && bash ./script.sh",
+                    "cat in.txt && node subdir/app.js"):
+            self._decision(cmd, "allow")
+
+    def test_an_interpreter_on_another_filesystem_still_allows(self):
+        # Locality is decided the way `shell_c_bodies` decides it: the code runs
+        # on another host, so this workspace's boundary has nothing to say.
+        for cmd in ("cat in.txt && kubectl exec p -- python3 -c 'import os'",
+                    "cat in.txt && ssh host python3 /q72-fake-target/x.py",
+                    "cat in.txt && docker exec c ruby -e 'puts 1'"):
+            self._decision(cmd, "allow")
+
+    def test_a_local_wrapper_still_reaches_the_interpreter(self):
+        for cmd in ("cat in.txt && timeout 5 python3 -c 'import os'",
+                    "cat in.txt && env python3 -c 'import os'",
+                    "cat in.txt && nohup perl -e 'print 1'"):
+            self._decision(cmd, "defer")
+
+    def test_a_query_flag_runs_no_code_and_still_allows(self):
+        for cmd in ("cat in.txt; python3 --version", "cat in.txt; node --version",
+                    "cat in.txt; perl --help", "cat in.txt; python3 -V"):
+            self._decision(cmd, "allow")
+
+    def test_an_interpreter_name_in_a_pattern_does_not_suppress(self):
+        # The rule keys on the group's command word. A loose token scan would
+        # read these as interpreter invocations and defer a clean grep.
+        for cmd in ("grep -n 'kindest/node' in.txt",
+                    "grep -rn python3 in.txt",
+                    "cat in.txt | grep -c perl"):
+            self._decision(cmd, "allow")
+
+    def test_an_interpreter_on_its_own_still_defers(self):
+        # Unchanged: no guarded command, so there was never an `allow` to
+        # suppress. Interpreters remain outside `SPEC`.
+        for cmd in ("python3 -c 'import os'", "python3 /q72-fake-target/x.py",
+                    "bash /q72-fake-target/x.sh"):
+            self._decision(cmd, "defer")
+
+    def test_an_outside_read_still_asks(self):
+        # The suppression withdraws `allow`; it must not mask a real offender.
+        self._decision("cat in.txt && cat /q72-fake-target/secret", "ask")
+
+
 class ShellCBodyAnalysisTests(unittest.TestCase):
     """A shell `-c` body the host runs is checked like any command string (Q61).
 

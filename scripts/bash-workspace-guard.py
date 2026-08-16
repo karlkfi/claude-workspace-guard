@@ -2114,6 +2114,22 @@ GREP_LIKE = frozenset({'grep', 'rg'})
 # group runs it on this host; see `shell_c_bodies` (Q61).
 SHELL_C_CMDS = frozenset({'sh', 'bash', 'zsh', 'dash', 'ksh'})
 
+# Interpreters that run code the hook cannot read. They are deliberately NOT in
+# SPEC — guarding an interpreter's file arguments is the documented non-goal
+# (`docs/design.md`), and a bare `python3 x.py` still defers to normal
+# permission rules. They are listed here for the narrower question of whether a
+# clean guarded command elsewhere in the string may speak for them; see
+# `interp_code_source`.
+INTERP_CMDS = frozenset({
+    'python', 'python2', 'python3', 'node', 'ruby', 'perl', 'php',
+    'deno', 'bun', 'Rscript', 'osascript',
+})
+
+# Flags that make an interpreter print and exit rather than run anything. Only
+# unambiguous spellings are listed: `-h` is bash's `hashall` and `-v` is
+# Python's verbose, and both still run code.
+INTERP_QUERY_FLAGS = frozenset({'--version', '--help', '-V'})
+
 # Command words that run a shell `-c` body in THIS filesystem. The body is only
 # re-analyzed under one of these, because a path in it means nothing unless the
 # shell it names is the host's: `docker exec c sh -c 'cat /var/lib/…'` and
@@ -2261,6 +2277,67 @@ def shell_c_bodies(tokens):
                 break
             j += 1
     return out
+
+
+def interp_code_source(tokens):
+    """What an interpreter group runs, when `allow` must not speak for it.
+
+    Returns None when the group runs no interpreter, or is not running one on
+    this host. Otherwise ``('inline', None)`` for code the hook can never read —
+    a `-c`/`-e` operand, a heredoc, a bare stdin `-`, or a REPL — or
+    ``('script', tok)`` for a script path the caller resolves, since a script
+    *inside* the workspace is repo-resident code the boundary already trusts
+    (`docs/design.md`, "Sandboxing the workspace from itself" is a non-goal).
+
+    This is `shell_c_group`'s rule one layer out. A shell's `-c` body is not the
+    only opaque token a clean guarded command can end up vouching for:
+    `cat README.md && python3 -c '…'` returned `allow`, and `allow` speaks for
+    the WHOLE string, so the hook was short-circuiting the user's own permission
+    settings on arbitrary code. Interpreters are not in `SPEC` and deferring on
+    them is the documented threat model; *vouching* for them never was.
+
+    Locality is decided the same way `shell_c_bodies` decides it, and for the
+    same reason: the group's command word must be the interpreter itself or a
+    LOCAL_SHELL_WRAPPERS entry, so `kubectl exec p -- python3 -c …` and
+    `ssh h python3 …` — whose code runs on another filesystem — are left alone.
+    """
+    if not tokens:
+        return None
+    head = os.path.basename(tokens[0])
+    if head not in INTERP_CMDS and head not in SHELL_C_CMDS \
+            and head not in LOCAL_SHELL_WRAPPERS:
+        return None
+    for i, t in enumerate(tokens):
+        base = os.path.basename(t)
+        if base not in INTERP_CMDS and base not in SHELL_C_CMDS:
+            continue
+        # An interpreter takes its code from `-e`/`-c`; a shell only from `-c`
+        # (`bash -e` is errexit). Both are read off short-option clusters, so
+        # `perl -pe`, `perl -0pi -e` and `sh -lc` all fire. Over-reporting here
+        # costs a defer rather than a silent allow, which is the safe direction.
+        inline = 'ce' if base in INTERP_CMDS else 'c'
+        operand = None
+        for u in tokens[i+1:]:
+            if u == '-' or not u.startswith('-'):
+                operand = u
+                break
+            if u == '--':
+                continue
+            # A query flag runs no code at all, so there is nothing to vouch
+            # for. It has to be named: after heredoc stripping `bash --version`
+            # and `python3 <<'PY'` both reduce to a bare command word, and the
+            # operand-less case below has to keep reading the second as stdin.
+            if u in INTERP_QUERY_FLAGS:
+                return None
+            if not u.startswith('--') and any(ch in u[1:] for ch in inline):
+                return ('inline', None)
+        # No operand is a REPL or a `python3 <<'PY'` heredoc, whose body was
+        # stripped from the string before shlex ever saw it; `-` is an explicit
+        # read-from-stdin. Neither leaves the hook anything to read.
+        if operand is None or operand == '-':
+            return ('inline', None)
+        return ('script', operand)
+    return None
 
 
 def pgrep_operands(tokens):
@@ -3400,6 +3477,22 @@ def _analyze_command(cmd, ctx, base_cwd, depth=0, in_subst=False, seed_vars=None
             # signalling command does. Checked in the `elif` so a group that is
             # BOTH (`xargs sh -c 'kill …'`) keeps its signal classification.
             signal = signal or 'sh -c'
+        # Same suppression for an interpreter, which is opaque for the same
+        # reason a `-c` body is. A script operand is exempt while it resolves
+        # inside the workspace: that is repo-resident code, which the boundary
+        # already trusts, and exempting it is what keeps this from costing an
+        # order of magnitude more friction than it buys. An unresolvable operand
+        # (untracked cwd, a runtime-expanded token) cannot be shown to be
+        # in-workspace, so it suppresses.
+        src = interp_code_source(g)
+        if src is not None:
+            kind, tok = src
+            if kind == 'inline':
+                signal = signal or 'interpreter'
+            else:
+                k, rp = resolve_token(tok, group_cwd, group_cwd_unknown)
+                if k != 'path' or path_is_outside(rp, ctx.proj):
+                    signal = signal or 'interpreter'
         # The body is readable after all when it is a command string this host
         # runs — queued whatever the classification above landed on, since the
         # two answer different questions. Skipped once the cwd is untracked: the
