@@ -5,7 +5,7 @@ Single source of truth for progress and priorities in workspace-guard. Pick the 
 **Status:** 🔲 ready · 🚫 blocked
 **Size:** S = one session/PR · M = 2–3 sessions · L = needs a plan doc under `docs/plan/`
 **Labels:** `security` `tests` `docs` `infra` `bug` `parsing` `retro`
-**Next ID:** Q72
+**Next ID:** Q74
 
 **Maintaining this file:** see [`docs/development/maintaining-backlog.md`](development/maintaining-backlog.md).
 
@@ -15,6 +15,7 @@ Specific actionable items in priority order. Pick from the top; skip 🚫 items 
 
 | ID | Item | Labels | St | Sz | Notes |
 |---|---|---|---|---|---|
+| <a id="Q73"></a>Q73 | Extend the interpreter allow-suppression to the PowerShell tool | `security` | 🔲 | S | PowerShell still lets a clean guarded command vouch for interpreter code, unlike Bash since Q72: `Get-Content .\README.md; python3 -c '…'` returns `allow`. Port `interp_code_source` over. |
 
 ## Deferred
 
