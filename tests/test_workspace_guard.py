@@ -6022,20 +6022,21 @@ class InstalledExtensionReadExemptionTests(unittest.TestCase):
         return None if out is None else \
             out["hookSpecificOutput"]["permissionDecision"]
 
+    # The exempt case is tier-stable: `classify_outside` consults the read
+    # prefixes before the host-temp rule, so it answers the same on a platform
+    # where this fixture's temp home is itself host-temp. The two negative cases
+    # are not, so they assert only that SOME blocking tier was reached.
     def test_reading_installed_plugin_code_is_exempt(self):
         p = os.path.join(self.home, ".claude", "plugins", "p", "run.sh")
-        self.assertNotEqual(self._decision(f"bash {p}"), "ask")
+        self.assertNotIn(self._decision(f"bash {sh(p)}"), ("ask", "deny"))
 
-    # These two assert only that the exemption does NOT apply, not which
-    # blocking tier results: the fixture's fake home is a temp dir, so the
-    # host-temp rule answers `deny` where a real home would answer `ask`.
     def test_writing_installed_plugin_code_is_not_exempt(self):
         p = os.path.join(self.home, ".claude", "plugins", "p", "run.sh")
-        self.assertIn(self._decision(f"cp ./in.txt {p}"), ("ask", "deny"))
+        self.assertIn(self._decision(f"cp ./in.txt {sh(p)}"), ("ask", "deny"))
 
     def test_an_unrelated_outside_script_is_not_exempt(self):
         p = os.path.join(self.home, "elsewhere", "run.sh")
-        self.assertIn(self._decision(f"bash {p}"), ("ask", "deny"))
+        self.assertIn(self._decision(f"bash {sh(p)}"), ("ask", "deny"))
 
 
 class ShellCBodyAnalysisTests(unittest.TestCase):
